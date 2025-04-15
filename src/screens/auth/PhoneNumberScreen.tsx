@@ -20,8 +20,8 @@ const PhoneNumberScreen: React.FC<PhoneNumberScreenProps> = ({ navigation }) => 
 
   const handleContinue = () => {
     // Here you would typically implement phone verification
-    // For now, we'll just navigate to the main app screen
-    navigation.navigate('MainApp');
+    // For now, we'll just navigate to the model selection screen
+    navigation.navigate('ModelSelection');
   };
 
   return (

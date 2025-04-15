@@ -13,7 +13,7 @@ export type RootStackParamList = {
   PhoneNumber: undefined;
   ModelSelection: undefined;
   Download: { selectedModel: string };
-  Main: { modelPath: string };
+  Main: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
