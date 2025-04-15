@@ -1,16 +1,17 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Image, 
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
   SafeAreaView,
   Dimensions,
   TouchableOpacity,
-  Animated
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { COLORS, FONTS, SIZES } from '../../constants/theme';
-import Button from '../../components/Button';
 
 const { width, height } = Dimensions.get('window');
 
@@ -19,78 +20,87 @@ interface OnboardingScreenProps {
 }
 
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
-  // Pagination indicator state
-  const [activeSlide, setActiveSlide] = useState(0);
-  
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  
-  useEffect(() => {
-    // Run animations when component mounts
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      })
-    ]).start();
-    
-    // Auto navigate for demo purposes only - can be removed in production
-    const timer = setTimeout(() => {
-      navigation.navigate('Features');
-    }, 3000);
-    
-    return () => clearTimeout(timer);
-  }, [fadeAnim, slideAnim, navigation]);
+  const [currentPage, setCurrentPage] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const page = Math.round(offsetX / width);
+    setCurrentPage(page);
+  };
+
+  const screens = [
+    {
+      image: require('../../../assets/logo.png'),
+      title: "It's Dhi",
+      subtitle: "",
+    },
+    {
+      image: require('../../../assets/onboarding.png'),
+      title: "I'm Pi",
+      subtitle: "Your personal AI companion",
+    },
+    {
+      image: require('../../../assets/onboarding.png'),
+      title: "Together, we can",
+      subtitle: "Keep a journal, make a plan, learn something new",
+    },
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Animated.View 
-          style={[
-            styles.topSection,
-            { 
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          {/* Phone image on orange background */}
-          <Image 
-            source={require('../../../assets/person-on-table.png')} 
-            style={styles.phoneImage}
-            resizeMode="contain"
-          />
-        </Animated.View>
-        
-        <Animated.View 
-          style={[
-            styles.logoContainer,
-            { 
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.logoText}>I'm</Text>
-          <Text style={styles.piText}>Pi</Text>
-          
-          {/* Pagination dots */}
-          <View style={styles.pagination}>
-            <View style={[styles.paginationDot, styles.activeDot]} />
-            <View style={styles.paginationDot} />
-            <View style={styles.paginationDot} />
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        style={styles.scrollView}
+      >
+        {screens.map((screen, index) => (
+          <View key={index} style={styles.screen}>
+            <View style={styles.imageContainer}>
+              <Image
+                source={screen.image}
+                style={[
+                  styles.image,
+                  index === 0 && styles.logoImage
+                ]}
+                resizeMode={index === 0 ? "contain" : "cover"}
+              />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.title}>{screen.title}</Text>
+              {screen.subtitle && (
+                <Text style={styles.subtitle}>{screen.subtitle}</Text>
+              )}
+            </View>
           </View>
-        </Animated.View>
-        
-        {/* Home indicator (bottom line) */}
-        <View style={styles.homeIndicator} />
+        ))}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <View style={styles.pagination}>
+          {screens.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.paginationDot,
+                currentPage === index && styles.activeDot,
+              ]}
+            />
+          ))}
+        </View>
+
+        {currentPage === screens.length - 1 && (
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => navigation.navigate('SignIn')}
+          >
+            <Text style={styles.buttonText}>Get Started</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -101,64 +111,77 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.primaryLight,
   },
-  content: {
+  scrollView: {
     flex: 1,
-    position: 'relative',
   },
-  topSection: {
-    width: '100%',
-    height: height * 0.5,
+  screen: {
+    width,
+    flex: 1,
+  },
+  imageContainer: {
+    height: height * 0.6,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
   },
-  phoneImage: {
+  image: {
+    width: width,
+    height: width,
+    borderRadius: 16,
+  },
+  logoImage: {
     width: width * 0.8,
     height: width * 0.8,
-    borderRadius: 16,
-    overflow: 'hidden',
   },
-  logoContainer: {
-    flex: 1,
+  textContainer: {
     paddingHorizontal: 40,
-    paddingTop: 20,
+    alignItems: 'center',
+    marginTop: 20,
   },
-  logoText: {
-    ...FONTS.h2,
-    color: COLORS.black,
-    marginBottom: -10,
-  },
-  piText: {
-    ...FONTS.largeTitle,
+  title: {
+    fontSize: 36,
+    fontWeight: '600',
     color: COLORS.primary,
-    fontWeight: '700',
-    marginTop: -20,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: COLORS.gray,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  footer: {
+    padding: 20,
+    paddingBottom: 40,
   },
   pagination: {
     flexDirection: 'row',
-    marginTop: 20,
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   paginationDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: COLORS.gray,
-    marginRight: 6,
+    marginHorizontal: 4,
     opacity: 0.3,
   },
   activeDot: {
     backgroundColor: COLORS.primary,
     opacity: 1,
   },
-  homeIndicator: {
-    width: 135,
-    height: 5,
-    backgroundColor: '#000',
-    borderRadius: 3,
-    alignSelf: 'center',
-    marginBottom: 8,
-    opacity: 0.2,
+  button: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
 
-export default OnboardingScreen; 
+export default OnboardingScreen;

@@ -6,94 +6,85 @@ import {
   SafeAreaView,
   TouchableOpacity,
   TextInput,
-  Dimensions,
-  Alert
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { COLORS, SIZES, FONTS } from '../../constants/theme';
-
-const { width, height } = Dimensions.get('window');
+import { COLORS } from '../../constants/theme';
 
 interface PhoneNumberScreenProps {
   navigation: any;
 }
 
 const PhoneNumberScreen: React.FC<PhoneNumberScreenProps> = ({ navigation }) => {
-  const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   const handleContinue = () => {
-    if (phoneNumber.length < 10) {
-      Alert.alert('Invalid Phone Number', 'Please enter a valid phone number');
-      return;
-    }
-
-    setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      // Navigate to main app - in a real app, this would go to a verification code screen
-      navigation.replace('Main');
-    }, 1500);
+    // Here you would typically implement phone verification
+    // For now, we'll just navigate to the main app screen
+    navigation.navigate('MainApp');
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        {/* Header with back button and progress bar */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.backButtonIcon}>←</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.progressBarContainer}>
-            <View style={styles.progressBar} />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.content}
+      >
+        {/* Back Button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <View style={styles.backButtonCircle}>
+            <Text style={styles.backButtonText}>←</Text>
           </View>
+        </TouchableOpacity>
+
+        {/* Title */}
+        <Text style={styles.title}>Enter your phone number</Text>
+        <Text style={styles.subtitle}>
+          We'll send you a verification code
+        </Text>
+
+        {/* Phone Input */}
+        <View style={styles.inputContainer}>
+          <View style={styles.countryCode}>
+            <Text style={styles.countryCodeText}>+1</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Phone number"
+            keyboardType="phone-pad"
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            maxLength={10}
+          />
         </View>
-        
-        {/* Title and phone input form */}
-        <View style={styles.formContainer}>
-          <Text style={styles.title}>
-            Please enter your phone number below:
+
+        {/* Continue Button */}
+        <TouchableOpacity
+          style={[
+            styles.continueButton,
+            phoneNumber.length < 10 && styles.continueButtonDisabled
+          ]}
+          onPress={handleContinue}
+          disabled={phoneNumber.length < 10}
+        >
+          <Text style={[
+            styles.continueButtonText,
+            phoneNumber.length < 10 && styles.continueButtonTextDisabled
+          ]}>
+            Continue
           </Text>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Country/Region</Text>
-            <TouchableOpacity style={styles.countrySelector}>
-              <Text style={styles.countryText}>United States (+1)</Text>
-            </TouchableOpacity>
-            
-            <Text style={styles.label}>Phone Number</Text>
-            <TextInput
-              style={styles.phoneInput}
-              placeholder="Phone Number"
-              placeholderTextColor={COLORS.gray}
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-            />
-          </View>
-          
-          <TouchableOpacity 
-            style={[
-              styles.continueButton,
-              (!phoneNumber || isLoading) && styles.disabledButton
-            ]}
-            onPress={handleContinue}
-            disabled={!phoneNumber || isLoading}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.continueButtonText}>
-              {isLoading ? 'Please wait...' : 'Continue'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        </TouchableOpacity>
+
+        {/* Terms */}
+        <Text style={styles.terms}>
+          By continuing you agree to our{' '}
+          <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
+          <Text style={styles.termsLink}>Privacy Policy</Text>
+        </Text>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -105,88 +96,90 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
-  header: {
-    marginTop: 10,
+    paddingHorizontal: 24,
+    paddingTop: 12,
   },
   backButton: {
+    marginBottom: 32,
+  },
+  backButtonCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: COLORS.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backButtonIcon: {
+  backButtonText: {
     fontSize: 24,
     color: COLORS.black,
   },
-  progressBarContainer: {
-    height: 4,
-    backgroundColor: COLORS.lightGray,
-    borderRadius: 2,
-    marginTop: 10,
-  },
-  progressBar: {
-    height: '100%',
-    width: '50%', // Half-way through the progress
-    backgroundColor: COLORS.primary,
-    borderRadius: 2,
-  },
-  formContainer: {
-    marginTop: 30,
-  },
   title: {
-    ...FONTS.h2,
-    color: COLORS.black,
-    marginBottom: 30,
+    fontSize: 24,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: COLORS.gray,
+    marginBottom: 32,
   },
   inputContainer: {
-    marginBottom: 30,
-  },
-  label: {
-    ...FONTS.body4,
-    color: COLORS.gray,
-    marginBottom: 10,
-  },
-  countrySelector: {
-    height: 56,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    flexDirection: 'row',
     marginBottom: 24,
-    justifyContent: 'center',
   },
-  countryText: {
-    ...FONTS.body3,
-    color: COLORS.black,
-  },
-  phoneInput: {
+  countryCode: {
+    width: 60,
     height: 56,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     borderRadius: 12,
-    paddingHorizontal: 16,
-    ...FONTS.body3,
-    color: COLORS.black,
-  },
-  continueButton: {
-    backgroundColor: COLORS.primary,
-    height: 56,
-    borderRadius: 28,
+    backgroundColor: COLORS.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
+    marginRight: 12,
   },
-  disabledButton: {
+  countryCodeText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+  input: {
+    flex: 1,
+    height: 56,
+    borderRadius: 12,
     backgroundColor: COLORS.lightGray,
-    opacity: 0.8,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: COLORS.primary,
+  },
+  continueButton: {
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  continueButtonDisabled: {
+    backgroundColor: COLORS.lightGray,
   },
   continueButtonText: {
-    color: COLORS.white,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
+    color: COLORS.white,
+  },
+  continueButtonTextDisabled: {
+    color: COLORS.gray,
+  },
+  terms: {
+    fontSize: 14,
+    color: COLORS.gray,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
   },
 });
 

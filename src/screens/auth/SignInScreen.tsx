@@ -4,77 +4,77 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  Image,
   TouchableOpacity,
   Dimensions
 } from 'react-native';
-import { COLORS, SIZES, FONTS } from '../../constants/theme';
+import { COLORS } from '../../constants/theme';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 interface SignInScreenProps {
   navigation: any;
 }
 
 const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
+  const handleSignIn = (provider: string) => {
+    // In a real app, you would implement actual authentication here
+    console.log(`Signing in with ${provider}`);
+    navigation.navigate('PhoneNumber');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {/* Header with back button */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.backButtonIcon}>←</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Main Image */}
-        <View style={styles.imageContainer}>
-          <Image 
-            source={require('../../../assets/person-train.png')}
-            style={styles.mainImage}
-            resizeMode="cover"
-          />
-        </View>
-        
-        {/* Title and Description */}
-        <View style={styles.textContainer}>
-          <Text style={styles.title}>
-            Start <Text style={styles.italicText}>talking</Text> to Pi
-          </Text>
-          
-          <Text style={styles.description}>
-            When you create your account with Pi, you'll able to see and save your conversation history.
-          </Text>
-        </View>
-        
-        {/* Sign up and Skip buttons */}
-        <View style={styles.buttonContainer}>
+        {/* Back Button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <View style={styles.backButtonCircle}>
+            <Text style={styles.backButtonText}>←</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Title */}
+        <Text style={styles.title}>
+          Create an account or sign in to save and see your conversation history.
+        </Text>
+
+        {/* Social Login Buttons */}
+        <View style={styles.socialButtons}>
           <TouchableOpacity 
-            style={styles.signupButton}
+            style={[styles.socialButton, { backgroundColor: '#4285F4' }]}
+            onPress={() => handleSignIn('Google')}
+          >
+            <Text style={[styles.socialButtonText, { color: '#FFFFFF' }]}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.socialButton, { backgroundColor: '#1877F2' }]}
+            onPress={() => handleSignIn('Facebook')}
+          >
+            <Text style={[styles.socialButtonText, { color: '#FFFFFF' }]}>Continue with Facebook</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.socialButton, { backgroundColor: '#000000' }]}
+            onPress={() => handleSignIn('Apple')}
+          >
+            <Text style={[styles.socialButtonText, { color: '#FFFFFF' }]}>Continue with Apple</Text>
+          </TouchableOpacity>
+
+          <View style={styles.dividerContainer}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.divider} />
+          </View>
+
+          <TouchableOpacity 
+            style={styles.phoneButton}
             onPress={() => navigation.navigate('PhoneNumber')}
-            activeOpacity={0.9}
           >
-            <Text style={styles.signupButtonText}>Sign up</Text>
+            <Text style={styles.phoneButtonText}>Use phone number</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.skipButton}
-            onPress={() => navigation.navigate('Main')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.skipButtonText}>Skip</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Pagination dots */}
-        <View style={styles.pagination}>
-          <View style={styles.paginationDot} />
-          <View style={styles.paginationDot} />
-          <View style={[styles.paginationDot, styles.activeDot]} />
         </View>
       </View>
       
@@ -91,105 +91,78 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 12,
   },
   backButton: {
+    marginBottom: 32,
+  },
+  backButtonCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: COLORS.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backButtonIcon: {
+  backButtonText: {
     fontSize: 24,
     color: COLORS.black,
   },
-  imageContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  mainImage: {
-    width: width * 0.85,
-    height: width * 0.85,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  textContainer: {
-    marginTop: 30,
-    alignItems: 'center',
-  },
   title: {
-    ...FONTS.h1,
-    color: COLORS.black,
+    fontSize: 24,
+    fontWeight: '500',
+    color: COLORS.primary,
+    marginBottom: 40,
     textAlign: 'center',
-    marginBottom: 15,
   },
-  italicText: {
-    fontStyle: 'italic',
+  socialButtons: {
+    width: '100%',
   },
-  description: {
-    ...FONTS.body3,
-    color: COLORS.gray,
-    textAlign: 'center',
-    marginHorizontal: 20,
-    lineHeight: 24,
-  },
-  buttonContainer: {
-    marginTop: 40,
+  socialButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  signupButton: {
-    backgroundColor: COLORS.primary,
-    width: width - 48,
-    height: 56,
-    borderRadius: 28,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginBottom: 16,
   },
-  signupButtonText: {
-    color: COLORS.white,
-    fontSize: 18,
+  socialButtonText: {
+    fontSize: 16,
     fontWeight: '600',
   },
-  skipButton: {
-    backgroundColor: COLORS.white,
-    width: width - 48,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
+  phoneButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: COLORS.lightGray,
   },
-  skipButtonText: {
+  phoneButtonText: {
+    fontSize: 16,
     color: COLORS.primary,
-    fontSize: 18,
     fontWeight: '500',
   },
-  pagination: {
+  dividerContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 'auto',
-    paddingBottom: 15,
+    marginVertical: 24,
   },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.gray,
-    marginHorizontal: 5,
-    opacity: 0.3,
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.lightGray,
   },
-  activeDot: {
-    backgroundColor: COLORS.primary,
-    opacity: 1,
+  dividerText: {
+    marginHorizontal: 16,
+    color: COLORS.gray,
+    fontSize: 16,
   },
   homeIndicator: {
     width: 135,

@@ -1,46 +1,68 @@
-import React, { useState, useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import AuthNavigator from './AuthNavigator';
+import React from 'react';
+import { createStackNavigator } from '@react-navigation/stack';
+import OnboardingScreen from '../screens/auth/OnboardingScreen';
+import SignInScreen from '../screens/auth/SignInScreen';
+import PhoneNumberScreen from '../screens/auth/PhoneNumberScreen';
+import ModelSelectionScreen from '../screens/ModelSelectionScreen';
+import DownloadScreen from '../screens/DownloadScreen';
 import MainScreen from '../screens/MainScreen';
 
 export type RootStackParamList = {
-  Auth: undefined;
-  Main: undefined;
+  Onboarding: undefined;
+  SignIn: undefined;
+  PhoneNumber: undefined;
+  ModelSelection: undefined;
+  Download: { selectedModel: string };
+  Main: { modelPath: string };
 };
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+const Stack = createStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    // Check if user is authenticated
-    // This could be a token check or similar
-    // For demo purposes, we'll just set loading to false
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-  }, []);
-
-  if (isLoading) {
-    // You could show a splash screen here
-    return null;
-  }
-
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-        }}
-        initialRouteName={isAuthenticated ? 'Main' : 'Auth'}
-      >
-        <Stack.Screen name="Auth" component={AuthNavigator} />
-        <Stack.Screen name="Main" component={MainScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <Stack.Navigator
+      initialRouteName="Onboarding"
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#f4511e',
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
+      <Stack.Screen 
+        name="Onboarding" 
+        component={OnboardingScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="SignIn" 
+        component={SignInScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="PhoneNumber" 
+        component={PhoneNumberScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="ModelSelection" 
+        component={ModelSelectionScreen}
+        options={{ title: 'Select Model' }}
+      />
+      <Stack.Screen 
+        name="Download" 
+        component={DownloadScreen}
+        options={{ title: 'Download Model' }}
+      />
+      <Stack.Screen 
+        name="Main" 
+        component={MainScreen}
+        options={{ title: 'Chat' }}
+      />
+    </Stack.Navigator>
   );
 };
 

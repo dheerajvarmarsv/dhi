@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -9,43 +9,111 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
   Dimensions
 } from 'react-native';
-import { COLORS, FONTS, SIZES } from '../constants/theme';
+import { initLlama, releaseAllLlama } from 'llama.rn';
+import { downloadModel } from '../api/model';
+import RNFS from 'react-native-fs';
+import { COLORS, FONTS } from '../constants/theme';
 
 const { width, height } = Dimensions.get('window');
 
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 const MainScreen = () => {
   const [message, setMessage] = useState('');
-  const [chatMessages, setChatMessages] = useState([
+  const [chatMessages, setChatMessages] = useState<Message[]>([
     {
-      sender: 'pi',
-      text: "Hi there! I'm Pi. I can help with lots of things, from answering questions to just chatting. What's on your mind today?"
+      role: 'assistant',
+      content: "Hi there! I'm Pi. I can help with lots of things, from answering questions to just chatting. What's on your mind today?"
     }
   ]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [context, setContext] = useState<any>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  const handleSendMessage = () => {
-    if (!message.trim()) return;
+  useEffect(() => {
+    checkAndLoadModel();
+    return () => {
+      releaseAllLlama();
+    };
+  }, []);
+
+  const checkAndLoadModel = async () => {
+    try {
+      const files = await RNFS.readDir(RNFS.DocumentDirectoryPath);
+      const ggufFiles = files.filter(file => file.name.endsWith('.gguf'));
+      
+      if (ggufFiles.length === 0) {
+        Alert.alert(
+          'No Model Found',
+          'Please download a model first',
+          [
+            { text: 'OK', onPress: () => {} }
+          ]
+        );
+        return;
+      }
+
+      // Use the first available model
+      const modelPath = `${RNFS.DocumentDirectoryPath}/${ggufFiles[0].name}`;
+      const ctx = await initLlama({
+        model: modelPath,
+        use_mlock: true,
+        n_ctx: 2048,
+        n_batch: 512,
+        n_threads: 6,
+        n_gpu_layers: 0
+      });
+      setContext(ctx);
+    } catch (error) {
+      console.error('Error loading model:', error);
+      Alert.alert('Error', 'Failed to load the chat model');
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim() || !context) return;
     
-    // Add user message
-    setChatMessages(prev => [
-      ...prev, 
-      { sender: 'user', text: message }
-    ]);
-    
-    // Clear input
+    const userMessage = message.trim();
     setMessage('');
     
-    // Simulate Pi response after 1 second
-    setTimeout(() => {
-      setChatMessages(prev => [
-        ...prev, 
-        { 
-          sender: 'pi', 
-          text: 'This is a simulated response from Pi. In the actual app, this would be a real response from the LLM model based on your message.' 
-        }
-      ]);
-    }, 1000);
+    // Add user message
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    
+    setIsLoading(true);
+    try {
+      // Prepare conversation history
+      const history = chatMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      history.push({ role: 'user', content: userMessage });
+
+      // Generate response
+      const response = await context.complete({
+        prompt: userMessage,
+        temperature: 0.7,
+        top_p: 0.9,
+        top_k: 40,
+        repeat_penalty: 1.1,
+        max_tokens: 1024,
+        stop: ['</s>', 'user:', 'User:', 'assistant:', 'Assistant:']
+      });
+
+      // Add assistant response
+      setChatMessages(prev => [...prev, { role: 'assistant', content: response.trim() }]);
+    } catch (error) {
+      console.error('Error generating response:', error);
+      Alert.alert('Error', 'Failed to generate response');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -64,25 +132,34 @@ const MainScreen = () => {
         <ScrollView 
           style={styles.chatContainer}
           contentContainerStyle={styles.chatContent}
+          ref={scrollViewRef}
+          onContentSizeChange={() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }}
         >
           {chatMessages.map((msg, index) => (
             <View 
               key={index}
               style={[
                 styles.messageBubble,
-                msg.sender === 'user' ? styles.userBubble : styles.piBubble
+                msg.role === 'user' ? styles.userBubble : styles.piBubble
               ]}
             >
               <Text 
                 style={[
                   styles.messageText,
-                  msg.sender === 'user' ? styles.userText : styles.piText
+                  msg.role === 'user' ? styles.userText : styles.piText
                 ]}
               >
-                {msg.text}
+                {msg.content}
               </Text>
             </View>
           ))}
+          {isLoading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
+          )}
         </ScrollView>
         
         {/* Input Area */}
@@ -94,11 +171,15 @@ const MainScreen = () => {
             value={message}
             onChangeText={setMessage}
             multiline
+            editable={!isLoading}
           />
           <TouchableOpacity 
-            style={styles.sendButton}
+            style={[
+              styles.sendButton,
+              (!message.trim() || isLoading) && styles.sendButtonDisabled
+            ]}
             onPress={handleSendMessage}
-            disabled={!message.trim()}
+            disabled={!message.trim() || isLoading}
           >
             <Text style={styles.sendButtonText}>→</Text>
           </TouchableOpacity>
@@ -124,7 +205,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.lightGray,
   },
   headerTitle: {
-    ...FONTS.h2,
+    fontSize: 24,
     color: COLORS.primary,
     fontWeight: '700',
   },
@@ -154,7 +235,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   messageText: {
-    ...FONTS.body3,
+    fontSize: 16,
     lineHeight: 22,
   },
   userText: {
@@ -162,6 +243,10 @@ const styles = StyleSheet.create({
   },
   piText: {
     color: COLORS.black,
+  },
+  loadingContainer: {
+    padding: 10,
+    alignItems: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -181,7 +266,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     paddingRight: 45,
-    ...FONTS.body3,
+    fontSize: 16,
     color: COLORS.black,
   },
   sendButton: {
@@ -193,6 +278,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: COLORS.gray,
   },
   sendButtonText: {
     color: COLORS.white,
