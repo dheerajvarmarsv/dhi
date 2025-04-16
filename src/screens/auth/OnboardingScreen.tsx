@@ -188,7 +188,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
         {currentPage === screens.length - 1 && (
           <TouchableOpacity
             style={styles.button}
-            onPress={() => navigation.navigate('SignIn')}
+            onPress={() => navigation.navigate('ModelSelection')}
           >
             <Text style={styles.buttonText}>Get Started</Text>
           </TouchableOpacity>

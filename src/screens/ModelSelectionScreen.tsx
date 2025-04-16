@@ -34,8 +34,12 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
 
+  // Updated model formats to include Gemma 3 and Llama 3.2 3B
   const modelFormats = [
     { label: 'Llama-3.2-1B-Instruct' },
+    { label: 'Llama-3.2-3B-Instruct' },  // Added Llama 3.2 3B
+    { label: 'Gemma-3-1B-Instruct' },    // Added Gemma 3 1B
+    { label: 'Gemma-3-4B-Instruct' },    // Added Gemma 3 4B
     { label: 'Qwen2-0.5B-Instruct' },
     { label: 'DeepSeek-R1-Distill-Qwen-1.5B' },
     { label: 'SmolLM2-1.7B-Instruct' },
@@ -43,6 +47,9 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
 
   const HF_TO_GGUF = {
     'Llama-3.2-1B-Instruct': 'medmekk/Llama-3.2-1B-Instruct.GGUF',
+    'Llama-3.2-3B-Instruct': 'lmstudio-community/Llama-3.2-3B-Instruct-GGUF', // Updated to a more reliable repository
+    'Gemma-3-1B-Instruct': 'litert-community/Gemma3-1B-IT',                     // More reliable Gemma 3 1B repository
+    'Gemma-3-4B-Instruct': 'unsloth/gemma-3-4b-it-GGUF',                     // Fixed Gemma 3 4B repository
     'DeepSeek-R1-Distill-Qwen-1.5B': 'medmekk/DeepSeek-R1-Distill-Qwen-1.5B.GGUF',
     'Qwen2-0.5B-Instruct': 'medmekk/Qwen2.5-0.5B-Instruct.GGUF',
     'SmolLM2-1.7B-Instruct': 'medmekk/SmolLM2-1.7B-Instruct.GGUF',
