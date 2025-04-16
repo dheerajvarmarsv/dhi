@@ -1,9 +1,7 @@
 export type RootStackParamList = {
   Onboarding: undefined;
-  Login: undefined;
-  SignUp: undefined;
-  Home: undefined;
+  SignIn: undefined;
+  PhoneNumber: undefined;
   ModelSelection: undefined;
   Chat: { selectedModel: string };
-  Todo: undefined;
 }; 

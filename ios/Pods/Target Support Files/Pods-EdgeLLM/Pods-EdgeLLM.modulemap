@@ -1,6 +1,0 @@
-module Pods_EdgeLLM {
-  umbrella header "Pods-EdgeLLM-umbrella.h"
-
-  export *
-  module * { export * }
-}
