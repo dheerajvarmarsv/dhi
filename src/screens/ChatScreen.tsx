@@ -17,16 +17,14 @@ import { initLlama, releaseAllLlama } from 'llama.rn';
 import RNFS from 'react-native-fs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
+import { saveChatHistory, loadChatHistory, clearChatHistory } from '../utils/chatStorage';
+import { formatPrompt, promptTemplates } from '../utils/promptTemplates';
+import PersonaSelector from '../components/PersonaSelector';
+import { Message } from '../types';
 
 type RootStackParamList = {
   Chat: { selectedModel: string };
   ModelSelection: undefined;
-};
-type Message = {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  thought?: string;
-  showThought?: boolean;
 };
 
 type Props = {
@@ -49,14 +47,17 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [tokensPerSecond, setTokensPerSecond] = useState<number[]>([]);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string>('general');
+  const [personaSelectorVisible, setPersonaSelectorVisible] = useState<boolean>(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollPositionRef = useRef(0);
   const contentHeightRef = useRef(0);
 
-  // Load the model when component mounts
+  // Load the model and chat history when component mounts
   useEffect(() => {
     loadModel(selectedModel);
+    loadChat();
     
     // Cleanup on unmount
     return () => {
@@ -65,6 +66,14 @@ const ChatScreen = ({ route, navigation }: Props) => {
       }
     };
   }, [selectedModel]);
+  
+  const loadChat = async () => {
+    const history = await loadChatHistory(selectedModel);
+    if (history && history.messages.length > 0) {
+      setConversation(history.messages);
+      setSelectedPersonaId(history.personaId || 'general');
+    }
+  };
 
   const loadModel = async (modelName: string) => {
     try {
@@ -121,11 +130,9 @@ const ChatScreen = ({ route, navigation }: Props) => {
       return;
     }
 
-    const newConversation: Message[] = [
-      ...conversation,
-      { role: 'user', content: userInput },
-    ];
-    setConversation(newConversation);
+    const newUserMessage: Message = { role: 'user', content: userInput };
+    const updatedConversation = [...conversation, newUserMessage];
+    setConversation(updatedConversation);
     setUserInput('');
     setIsGenerating(true);
     setAutoScrollEnabled(true);
@@ -144,7 +151,9 @@ const ChatScreen = ({ route, navigation }: Props) => {
         '<|end_of_text|>',
         '<｜end of sentence｜>',
       ];
-      const chat = newConversation;
+      
+      // Format with the selected persona's prompt template
+      const formattedMessages = formatPrompt([...updatedConversation], selectedPersonaId);
 
       // Append a placeholder for the assistant's response
       setConversation((prev) => [
@@ -160,6 +169,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       let currentAssistantMessage = '';
       let currentThought = '';
       let inThinkBlock = false;
+      let inEmpathyChain = false;
       
       interface CompletionData {
         token: string;
@@ -173,44 +183,72 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
       const result: CompletionResult = await context.completion(
         {
-          messages: chat,
+          messages: formattedMessages,
           n_predict: 10000,
           stop: stopWords,
         },
         (data: CompletionData) => {
           const token = data.token;
           currentAssistantMessage += token;
+          
+          // Handle Dhi Compass specific format with empathy_chain
+          if (selectedPersonaId === 'compass') {
+            if (token.includes('<empathy_chain>')) {
+              inEmpathyChain = true;
+              currentThought = token.replace('<empathy_chain>', '');
+            } else if (token.includes('</empathy_chain>')) {
+              inEmpathyChain = false;
+              const finalThought = currentThought.replace('</empathy_chain>', '').trim();
+              
+              setConversation((prev) => {
+                const lastIndex = prev.length - 1;
+                const updated = [...prev];
+                updated[lastIndex] = {
+                  ...updated[lastIndex],
+                  thought: finalThought,
+                };
+                return updated;
+              });
+              
+              currentThought = '';
+            } else if (inEmpathyChain) {
+              currentThought += token;
+            }
+          } else {
+            // Original think block format
+            if (token.includes('<think>')) {
+              inThinkBlock = true;
+              currentThought = token.replace('<think>', '');
+            } else if (token.includes('</think>')) {
+              inThinkBlock = false;
+              const finalThought = currentThought.replace('</think>', '').trim();
 
-          if (token.includes('<think>')) {
-            inThinkBlock = true;
-            currentThought = token.replace('<think>', '');
-          } else if (token.includes('</think>')) {
-            inThinkBlock = false;
-            const finalThought = currentThought.replace('</think>', '').trim();
+              setConversation((prev) => {
+                const lastIndex = prev.length - 1;
+                const updated = [...prev];
+                updated[lastIndex] = {
+                  ...updated[lastIndex],
+                  content: updated[lastIndex].content.replace(
+                    `<think>${finalThought}</think>`,
+                    ''
+                  ),
+                  thought: finalThought,
+                };
+                return updated;
+              });
 
-            setConversation((prev) => {
-              const lastIndex = prev.length - 1;
-              const updated = [...prev];
-
-              updated[lastIndex] = {
-                ...updated[lastIndex],
-                content: updated[lastIndex].content.replace(
-                  `<think>${finalThought}</think>`,
-                  ''
-                ),
-                thought: finalThought,
-              };
-
-              return updated;
-            });
-
-            currentThought = '';
-          } else if (inThinkBlock) {
-            currentThought += token;
+              currentThought = '';
+            } else if (inThinkBlock) {
+              currentThought += token;
+            }
           }
 
+          // Remove any empathy_chain markers from visible content
           const visibleContent = currentAssistantMessage
             .replace(/<think>.*?<\/think>/gs, '')
+            .replace(/<empathy_chain>.*?<\/empathy_chain>/gs, '')
+            .replace(/<assistant_response>/g, '')
+            .replace(/<\/assistant_response>/g, '')
             .trim();
 
           setConversation((prev) => {
@@ -226,6 +264,13 @@ const ChatScreen = ({ route, navigation }: Props) => {
             });
           }
         }
+      );
+
+      // Save chat history after completion
+      await saveChatHistory(
+        selectedModel, 
+        conversation, 
+        selectedPersonaId
       );
 
       setTokensPerSecond((prev) => [
@@ -263,6 +308,81 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   };
 
+  const clearChat = async () => {
+    Alert.alert(
+      'Clear Chat',
+      'Are you sure you want to clear this conversation?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            await clearChatHistory(selectedModel);
+            setConversation(INITIAL_CONVERSATION);
+          },
+        },
+      ]
+    );
+  };
+  
+  const handlePersonaChange = async (personaId: string) => {
+    setSelectedPersonaId(personaId);
+    
+    // Update system message
+    const selectedTemplate = promptTemplates.find(p => p.id === personaId);
+    if (selectedTemplate) {
+      // If we have messages, update the system message
+      if (conversation.length > 0 && conversation[0].role === 'system') {
+        const updatedConversation = [...conversation];
+        updatedConversation[0] = {
+          ...updatedConversation[0],
+          content: selectedTemplate.systemPrompt
+        };
+        setConversation(updatedConversation);
+        
+        // Save the updated conversation
+        await saveChatHistory(selectedModel, updatedConversation, personaId);
+      }
+    }
+  };
+
+  const selectedPersona = promptTemplates.find(p => p.id === selectedPersonaId) || promptTemplates[0];
+
+  const handleDeleteModel = () => {
+    Alert.alert(
+      'Delete AI Brain',
+      'Are you sure you want to delete the AI model from your device? You will need to download it again to use the app offline.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const destPath = `${RNFS.DocumentDirectoryPath}/${selectedModel}`;
+              if (await RNFS.exists(destPath)) {
+                await RNFS.unlink(destPath);
+                Alert.alert('Success', 'AI model deleted successfully');
+                // Navigate back to model selection
+                navigation.replace('ModelSelection');
+              }
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              Alert.alert('Error', `Failed to delete model: ${errorMessage}`);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -276,8 +396,28 @@ const ChatScreen = ({ route, navigation }: Props) => {
           >
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Llama Chat</Text>
-          <View style={styles.placeholder} />
+          <TouchableOpacity 
+            style={styles.personaButton}
+            onPress={() => setPersonaSelectorVisible(true)}
+          >
+            <Text style={styles.personaButtonText}>
+              {selectedPersona.icon} {selectedPersona.name}
+            </Text>
+          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity 
+              style={styles.clearButton}
+              onPress={clearChat}
+            >
+              <Text style={styles.clearButtonText}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteModelButton}
+              onPress={handleDeleteModel}
+            >
+              <Text style={styles.deleteModelText}>Delete Brain</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         
         <ScrollView
@@ -351,37 +491,43 @@ const ChatScreen = ({ route, navigation }: Props) => {
           </View>
         </ScrollView>
         
-        <View style={styles.bottomContainer}>
-          <View style={styles.inputContainer}>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.input}
-                placeholder="Type your message..."
-                placeholderTextColor="#94A3B8"
-                value={userInput}
-                onChangeText={setUserInput}
-                editable={!!context && !isGenerating}
-              />
-              {isGenerating ? (
-                <TouchableOpacity
-                  style={styles.stopButton}
-                  onPress={stopGeneration}
-                >
-                  <Text style={styles.buttonText}>□ Stop</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={handleSendMessage}
-                  disabled={!context || !userInput.trim()}
-                >
-                  <Text style={styles.buttonText}>Send</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type your message..."
+            value={userInput}
+            onChangeText={setUserInput}
+            multiline
+            returnKeyType="default"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isGenerating}
+          />
+          {isGenerating ? (
+            <TouchableOpacity
+              style={[styles.sendButton, styles.stopButton]}
+              onPress={stopGeneration}
+            >
+              <Text style={styles.sendButtonText}>Stop</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.sendButton}
+              onPress={handleSendMessage}
+              disabled={!userInput.trim() || !context}
+            >
+              <Text style={styles.sendButtonText}>Send</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
+      
+      <PersonaSelector
+        visible={personaSelectorVisible}
+        onClose={() => setPersonaSelectorVisible(false)}
+        selectedPersonaId={selectedPersonaId}
+        onSelectPersona={handlePersonaChange}
+      />
     </SafeAreaView>
   );
 };
@@ -393,32 +539,53 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
+    padding: 10,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1E293B',
+    borderBottomColor: '#eee',
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   backButtonText: {
-    fontSize: 20,
-    color: '#334155',
+    fontSize: 24,
+    fontWeight: 'bold',
   },
-  placeholder: {
-    width: 36,
+  personaButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  personaButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  clearButton: {
+    padding: 8,
+  },
+  clearButtonText: {
+    color: '#e14f29',
+    fontWeight: '600',
+  },
+  deleteModelButton: {
+    marginLeft: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#fee2e2',
+    borderRadius: 12,
+  },
+  deleteModelText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,
@@ -518,18 +685,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
   },
-  bottomContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
-  },
   inputContainer: {
     padding: 16,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: 12,
   },
   input: {
     flex: 1,
@@ -566,7 +723,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     justifyContent: 'center',
   },
-  buttonText: {
+  sendButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',

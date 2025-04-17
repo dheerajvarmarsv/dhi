@@ -86,24 +86,54 @@ const BubblesScreen: React.FC<BubblesScreenProps> = ({ headerImage, featureCards
     };
   }, []);
 
-  // Initial positions for the bubbles (arranged in a circle around the center)
-  const getBubblePosition = (index, total) => {
+  // Position bubbles in a balanced 2x2 grid at top and bottom
+  const getBubblePosition = (index: number, total: number) => {
     const safeAreaWidth = width * 0.8; // Use 80% of width to keep bubbles from edge
-    const safeAreaHeight = height * 0.7; // Use 70% of height
     const centerX = width / 2;
-    const centerY = height / 2;
     
-    // Calculate positions in a circle around the center
-    // Use different radii for different bubbles for a more natural look
-    const radius = Math.min(safeAreaWidth, safeAreaHeight) * 0.42;
-    const angle = (index / total) * 2 * Math.PI + Math.random() * 0.2;
+    // Determine if top or bottom section
+    const isTopSection = index < total / 2;
     
-    // Add some randomness to positions while keeping them in a rough circle
-    const randomOffset = radius * 0.15;
-    const x = centerX + (radius + (Math.random() * randomOffset - randomOffset/2)) * Math.cos(angle);
-    const y = centerY + (radius + (Math.random() * randomOffset - randomOffset/2)) * Math.sin(angle);
+    // Determine position within the section (0-3)
+    const sectionPosition = isTopSection ? index : (index - Math.floor(total / 2));
     
-    return { x, y };
+    // Determine if in first or second row of the section
+    const isFirstRow = sectionPosition < 2;
+    
+    // Horizontal position calculation
+    // For each row, we want one bubble on the left and one on the right
+    const isLeftBubble = sectionPosition % 2 === 0;
+    
+    // Horizontal spread - distance from center
+    const horizSpread = width * 0.25; // 25% of screen width from center
+    const xPos = isLeftBubble ? centerX - horizSpread : centerX + horizSpread;
+    
+    // Vertical positions for the 4 possible configurations
+    let yPos;
+    
+    if (isTopSection) {
+      if (isFirstRow) {
+        // Top section, first row (higher)
+        yPos = height * 0.18;
+      } else {
+        // Top section, second row (lower)
+        yPos = height * 0.28;
+      }
+    } else {
+      if (isFirstRow) {
+        // Bottom section, first row (higher)
+        yPos = height * 0.58;
+      } else {
+        // Bottom section, second row (lower)
+        yPos = height * 0.68;
+      }
+    }
+    
+    // Add small randomness for natural feeling
+    const randomX = xPos + (Math.random() * 5 - 2.5);
+    const randomY = yPos + (Math.random() * 5 - 2.5);
+    
+    return { x: randomX, y: randomY };
   };
 
   return (
@@ -159,10 +189,10 @@ const styles = StyleSheet.create({
   },
   headerImageContainer: {
     position: 'absolute',
-    width: width * 0.7, // Slightly reduced to avoid overlap
-    height: height * 0.15,
-    top: height * 0.42, // Center vertically
-    left: width * 0.15, // Center horizontally
+    width: width * 0.85, // Increased from 0.7 to make image larger
+    height: height * 0.22, // Increased from 0.15 to make image larger
+    top: height * 0.38, // Slightly adjusted to keep centered
+    left: width * 0.075, // Adjusted to center the wider container (0.85/2 = 0.425, so (1-0.85)/2 = 0.075)
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 5, // Ensure it's above the bubbles

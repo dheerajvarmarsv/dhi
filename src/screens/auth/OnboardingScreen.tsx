@@ -1,5 +1,5 @@
 // src/screens/auth/OnboardingScreen.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,14 @@ import {
   ScrollView,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Platform,
 } from 'react-native';
 import { COLORS, FONTS, SIZES } from '../../constants/theme';
 import BubblesScreen from '../../components/BubblesScreen';
+import { isModelDownloaded, MODEL_FILENAME } from '../../utils/modelUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -38,8 +43,6 @@ type SecondScreen = {
 type ThirdScreen = {
   type: 'third';
   image: any;
-  title: string;
-  subtitle: string;
 };
 
 type Screen = FirstScreen | SecondScreen | ThirdScreen;
@@ -50,7 +53,153 @@ interface OnboardingScreenProps {
 
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
   const [currentPage, setCurrentPage] = useState(0);
+  const [isChecking, setIsChecking] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  
+  // New animation values for third screen
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  
+  // Text animation for third screen - only change the word part
+  const [currentTextIndex, setCurrentTextIndex] = useState(0);
+  const textFadeAnim = useRef(new Animated.Value(0)).current;
+  const taglineWords = [
+    "OFFLINE",
+    "PRIVATE",
+    "SECURE",
+    "FOR YOU"
+  ];
+  
+  useEffect(() => {
+    // Start animations when component mounts
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 800,
+        easing: Easing.out(Easing.back(1.5)),
+        useNativeDriver: true,
+      })
+    ]).start();
+    
+    // Start floating animation for logo
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    
+    // Pulse animation for third screen
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    
+    // Subtle rotation for third screen image
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 6000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(rotateAnim, {
+          toValue: 0,
+          duration: 6000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    
+    // Glow effect animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: false,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+    
+    // Animate through taglines for third screen
+    let textAnimationTimeout: NodeJS.Timeout;
+    
+    const animateText = () => {
+      // Fade out
+      Animated.timing(textFadeAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }).start(() => {
+        // Change text and fade in
+        setCurrentTextIndex((prevIndex) => (prevIndex + 1) % taglineWords.length);
+        Animated.timing(textFadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+        
+        // Schedule next animation
+        textAnimationTimeout = setTimeout(animateText, 2000);
+      });
+    };
+    
+    // Start text animation loop with initial fade in
+    Animated.timing(textFadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+    
+    textAnimationTimeout = setTimeout(animateText, 2000);
+    
+    return () => {
+      clearTimeout(textAnimationTimeout);
+    };
+  }, []);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -113,10 +262,50 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
     {
       type: 'third',
       image: require('../../../assets/startdhi.png'),
-      title: "It's Dhi",
-      subtitle: "Your personal AI companion",
     },
   ];
+
+  const handleGetStarted = async () => {
+    setIsChecking(true);
+    try {
+      const modelExists = await isModelDownloaded();
+      setIsChecking(false);
+      
+      if (modelExists) {
+        // If model exists, go directly to Chat
+        navigation.navigate('Chat', { selectedModel: MODEL_FILENAME });
+      } else {
+        // If model doesn't exist, go to download screen
+        navigation.navigate('ModelSelection');
+      }
+    } catch (error) {
+      setIsChecking(false);
+      navigation.navigate('ModelSelection');
+    }
+  };
+  
+  // Calculate float transform
+  const translateY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -8], // Subtle float effect
+  });
+
+  // Calculate rotation transform
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-3deg', '3deg'], // Subtle rotation
+  });
+  
+  // Calculate glow effect for third screen
+  const glowShadow = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [4, 16],
+  });
+  
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.1, 0.25],
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -134,37 +323,87 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
             {screen.type === 'first' ? (
               // First screen with robot image and logo
               <View style={styles.firstScreenContainer}>
-                <View style={styles.topImageContainer}>
+                <Animated.View 
+                  style={[
+                    styles.topImageContainer,
+                    {
+                      opacity: fadeAnim,
+                      transform: [
+                        { scale: scaleAnim },
+                      ]
+                    }
+                  ]}
+                >
                   <Image
                     source={screen.topImage}
                     style={styles.topImage}
                     resizeMode="contain"
                   />
-                </View>
-                <View style={styles.bottomImageContainer}>
+                </Animated.View>
+                <Animated.View 
+                  style={[
+                    styles.bottomImageContainer,
+                    {
+                      transform: [
+                        { translateY },
+                      ]
+                    }
+                  ]}
+                >
                   <Image
                     source={screen.bottomImage}
                     style={styles.logoImage}
                     resizeMode="contain"
                   />
-                </View>
+                </Animated.View>
               </View>
             ) : screen.type === 'second' ? (
               // Second screen with centered text and feature bubbles
               <BubblesScreen headerImage={screen.headerImage} featureCards={screen.featureCards} />
             ) : screen.type === 'third' ? (
-              // Third screen with Dhi image and sign in button
+              // Updated third screen with animated text
               <View style={styles.finalScreenContainer}>
-                <View style={styles.imageContainer}>
-                  <Image
-                    source={screen.image}
-                    style={styles.finalImage}
-                    resizeMode="contain"
-                  />
-                </View>
+                {/* Glow effect container (JS-driven animations) */}
+                <Animated.View 
+                  style={[
+                    styles.glowContainer,
+                    {
+                      shadowRadius: glowShadow,
+                      shadowOpacity: glowOpacity,
+                    }
+                  ]}
+                >
+                  {/* Image container (native-driven animations only) */}
+                  <Animated.View 
+                    style={[
+                      styles.finalImageContainer,
+                      {
+                        transform: [
+                          { scale: pulseAnim },
+                          { rotate }
+                        ]
+                      }
+                    ]}
+                  >
+                    <Image
+                      source={screen.image}
+                      style={styles.finalImage}
+                      resizeMode="contain"
+                    />
+                  </Animated.View>
+                </Animated.View>
                 <View style={styles.textContainer}>
-                  <Text style={styles.title}>{screen.title}</Text>
-                  <Text style={styles.subtitle}>{screen.subtitle}</Text>
+                  <View style={styles.taglineContainer}>
+                    <Text style={styles.percentText}>100% </Text>
+                    <Animated.Text 
+                      style={[
+                        styles.changingText,
+                        { opacity: textFadeAnim }
+                      ]}
+                    >
+                      {taglineWords[currentTextIndex]}
+                    </Animated.Text>
+                  </View>
                 </View>
               </View>
             ) : null}
@@ -188,9 +427,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
         {currentPage === screens.length - 1 && (
           <TouchableOpacity
             style={styles.button}
-            onPress={() => navigation.navigate('ModelSelection')}
+            onPress={handleGetStarted}
+            disabled={isChecking}
           >
-            <Text style={styles.buttonText}>Get Started</Text>
+            {isChecking ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Get Started</Text>
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -218,30 +462,40 @@ const styles = StyleSheet.create({
     paddingVertical: height * 0.02,
   },
   topImageContainer: {
-    width: width * 0.85,
-    height: height * 0.38,
+    width: width * 0.88,
+    height: height * 0.4,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: height * 0.02,
-    borderRadius: 45, // Much more rounded corners for oval effect
-    overflow: 'hidden', // Ensures the image respects the border radius
+    marginTop: height * 0.03,
+    borderRadius: 45,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+    backgroundColor: COLORS.primaryLight,
+    transform: [{ perspective: 1000 }],
   },
   topImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 45, // Match container radius for consistent oval shape
+    borderRadius: 45,
   },
   bottomImageContainer: {
     width: width,
-    height: height * 0.45, // Increased height for the logo
+    height: height * 0.5,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 0, // Remove horizontal padding
-    marginBottom: height * 0.02,
+    marginBottom: height * 0.01,
+    transform: [
+      { translateY: -height * 0.03 }
+    ],
   },
   logoImage: {
-    width: width, // Full width
-    height: height * 0.35, // Significantly increased height
+    width: width * 1.1,
+    height: height * 0.45,
+    resizeMode: 'contain',
   },
   // Other screen styles
   imageContainer: {
@@ -257,20 +511,31 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    height: height * 0.15,
     marginBottom: height * 0.06,
+    marginTop: height * 0.02,
   },
-  title: {
-    fontSize: Math.min(36, width * 0.09),
-    fontWeight: '600',
+  taglineContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  percentText: {
+    fontSize: Math.min(32, width * 0.08),
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'sans-serif-light',
+    fontWeight: '700',
     color: COLORS.primary,
-    textAlign: 'center',
-    marginBottom: height * 0.02,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
-  subtitle: {
-    fontSize: Math.min(18, width * 0.045),
-    color: COLORS.gray,
-    textAlign: 'center',
-    lineHeight: 24,
+  changingText: {
+    fontSize: Math.min(32, width * 0.08),
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'sans-serif-light',
+    fontWeight: '300',
+    color: COLORS.primary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   footer: {
     padding: 20,
@@ -311,7 +576,26 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: width * 0.05,
+    paddingHorizontal: width * 0.08,
+    paddingTop: height * 0.05,
+  },
+  glowContainer: {
+    width: width * 0.9,
+    height: height * 0.44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: height * 0.04,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 10,
+    shadowOpacity: 0.2,
+    backgroundColor: 'transparent',
+  },
+  finalImageContainer: {
+    width: width * 0.85,
+    height: height * 0.42,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   signInButton: {
     backgroundColor: COLORS.primary,
