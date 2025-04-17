@@ -1,8 +1,8 @@
 import RNFS from 'react-native-fs';
 
 // Fixed model details
-export const MODEL_FILENAME = 'Dolphin3.0-Llama3.2-3B-Q4_K_M.gguf';
-export const MODEL_REPO = 'bartowski/Dolphin3.0-Llama3.2-3B-GGUF';
+export const MODEL_FILENAME = 'Dolphin3.0-Llama3.2-1B-Q4_K_M.gguf';
+export const MODEL_REPO = 'bartowski/Dolphin3.0-Llama3.2-1B-GGUF';
 
 export const isModelDownloaded = async (): Promise<boolean> => {
   try {

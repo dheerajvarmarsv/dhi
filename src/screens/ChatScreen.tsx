@@ -11,6 +11,9 @@ import {
   Alert,
   SafeAreaView,
   ActivityIndicator,
+  Dimensions,
+  Animated,
+  Pressable,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { initLlama, releaseAllLlama } from 'llama.rn';
@@ -21,6 +24,27 @@ import { saveChatHistory, loadChatHistory, clearChatHistory } from '../utils/cha
 import { formatPrompt, promptTemplates } from '../utils/promptTemplates';
 import PersonaSelector from '../components/PersonaSelector';
 import { Message } from '../types';
+
+// Get device dimensions for responsive design
+const { width, height } = Dimensions.get('window');
+
+// App theme colors - consistent with onboarding
+const COLORS = {
+  primary: '#e14f29', // Orange primary color from Get Started button
+  background: '#f5f0e6', // Soft beige background like in the image
+  userBubble: '#f0e6d9', // Light beige/cream color for user bubbles
+  assistantBubble: '#FFFFFF', // White for assistant messages
+  text: '#1e3e1f', // Dark green text like Pi app
+  lightText: '#5a6955', // Lighter green-gray text
+  border: '#E2E8F0', // Border color
+}
+
+// Update font family and increase font sizes
+const FONTS = {
+  primary: 'Noto Sans',
+  secondary: 'Noto Sans',
+  fallback: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif',
+};
 
 type RootStackParamList = {
   Chat: { selectedModel: string };
@@ -196,6 +220,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
             if (token.includes('<empathy_chain>')) {
               inEmpathyChain = true;
               currentThought = token.replace('<empathy_chain>', '');
+              return; // Skip adding this to visible content
             } else if (token.includes('</empathy_chain>')) {
               inEmpathyChain = false;
               const finalThought = currentThought.replace('</empathy_chain>', '').trim();
@@ -211,14 +236,23 @@ const ChatScreen = ({ route, navigation }: Props) => {
               });
               
               currentThought = '';
+              return; // Skip adding this to visible content
             } else if (inEmpathyChain) {
               currentThought += token;
+              return; // Skip adding this to visible content
+            } else if (token.includes('<assistant_response>')) {
+              // Skip the tag but continue processing content inside
+              return;
+            } else if (token.includes('</assistant_response>')) {
+              // Skip the closing tag
+              return;
             }
           } else {
             // Original think block format
             if (token.includes('<think>')) {
               inThinkBlock = true;
               currentThought = token.replace('<think>', '');
+              return; // Skip adding this to visible content
             } else if (token.includes('</think>')) {
               inThinkBlock = false;
               const finalThought = currentThought.replace('</think>', '').trim();
@@ -228,35 +262,41 @@ const ChatScreen = ({ route, navigation }: Props) => {
                 const updated = [...prev];
                 updated[lastIndex] = {
                   ...updated[lastIndex],
-                  content: updated[lastIndex].content.replace(
-                    `<think>${finalThought}</think>`,
-                    ''
-                  ),
                   thought: finalThought,
                 };
                 return updated;
               });
 
               currentThought = '';
+              return; // Skip adding this to visible content
             } else if (inThinkBlock) {
               currentThought += token;
+              return; // Skip adding this to visible content
             }
           }
 
-          // Remove any empathy_chain markers from visible content
-          const visibleContent = currentAssistantMessage
-            .replace(/<think>.*?<\/think>/gs, '')
-            .replace(/<empathy_chain>.*?<\/empathy_chain>/gs, '')
-            .replace(/<assistant_response>/g, '')
-            .replace(/<\/assistant_response>/g, '')
-            .trim();
+          // Only update visible content with tokens that aren't part of thought process
+          if (!inEmpathyChain && !inThinkBlock) {
+            setConversation((prev) => {
+              const lastIndex = prev.length - 1;
+              const updated = [...prev];
+              
+              // Build visible content from scratch instead of filtering the whole message
+              if (!updated[lastIndex].content) {
+                updated[lastIndex].content = token;
+              } else {
+                updated[lastIndex].content += token;
+              }
 
-          setConversation((prev) => {
-            const lastIndex = prev.length - 1;
-            const updated = [...prev];
-            updated[lastIndex].content = visibleContent;
-            return updated;
-          });
+              // Post-process the visible content to remove any reasoning sections that weren't properly tagged
+              if (selectedPersonaId === 'compass' && updated[lastIndex].content.length > 30) {
+                const cleanedContent = cleanupEmotionSections(updated[lastIndex].content);
+                updated[lastIndex].content = cleanedContent;
+              }
+              
+              return updated;
+            });
+          }
 
           if (autoScrollEnabled && scrollViewRef.current) {
             requestAnimationFrame(() => {
@@ -283,6 +323,40 @@ const ChatScreen = ({ route, navigation }: Props) => {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Add a helper function to clean up the content
+  const cleanupEmotionSections = (content: string): string => {
+    // Store the original content to compare later
+    const originalContent = content;
+    
+    // Remove "Emotion: X" sections and anything between them and a double newline
+    content = content.replace(/Emotion:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+    
+    // Remove "Underlying Factors & Distortions:" sections
+    content = content.replace(/Underlying Factors (?:&|and) Distortions:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+    
+    // Remove "Chosen Approach:" sections
+    content = content.replace(/Chosen Approach:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+    
+    // Remove "Therapeutic Framing & Reasoning:" sections
+    content = content.replace(/Therapeutic Framing (?:&|and) Reasoning:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+    
+    // Remove "Strategy:" sections
+    content = content.replace(/Strategy:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+    
+    // Remove lines with patterns like "- All-or-nothing thinking" (distortion descriptions)
+    content = content.replace(/- [A-Za-z\-]+(?:thinking|distortion|bias).*?\n/g, '');
+    
+    // Clean up excessive newlines
+    content = content.replace(/\n{3,}/g, '\n\n');
+    
+    // If we've removed too much content, just return the original to avoid issues
+    if (content.trim().length < 20 && originalContent.length > 100) {
+      return originalContent;
+    }
+    
+    return content.trim();
   };
 
   const stopGeneration = async () => {
@@ -354,8 +428,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
   const handleDeleteModel = () => {
     Alert.alert(
-      'Delete AI Brain',
-      'Are you sure you want to delete the AI model from your device? You will need to download it again to use the app offline.',
+      'Delete DHI',
+      'Are you sure? You will need to download the DHI again to use.',
       [
         {
           text: 'Cancel',
@@ -369,17 +443,89 @@ const ChatScreen = ({ route, navigation }: Props) => {
               const destPath = `${RNFS.DocumentDirectoryPath}/${selectedModel}`;
               if (await RNFS.exists(destPath)) {
                 await RNFS.unlink(destPath);
-                Alert.alert('Success', 'AI model deleted successfully');
+                Alert.alert('Success', 'AI deleted successfully');
                 // Navigate back to model selection
                 navigation.replace('ModelSelection');
               }
             } catch (error) {
               const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              Alert.alert('Error', `Failed to delete model: ${errorMessage}`);
+              Alert.alert('Error', `Failed to delete: ${errorMessage}`);
             }
           }
         }
       ]
+    );
+  };
+
+  // Update the ButtonWithAnimation component to support icons
+  const ButtonWithAnimation = ({ 
+    onPress, 
+    style, 
+    textStyle, 
+    children, 
+    isStop = false,
+    isIcon = false
+  }) => {
+    const animatedValue = useRef(new Animated.Value(0)).current;
+
+    const handlePressIn = () => {
+      Animated.spring(animatedValue, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 0,
+      }).start();
+    };
+
+    const handlePressOut = () => {
+      Animated.spring(animatedValue, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 20,
+        bounciness: 0,
+      }).start();
+    };
+
+    const animatedStyle = {
+      transform: [
+        {
+          scale: animatedValue.interpolate({
+            inputRange: [0, 1],
+            outputRange: [1, 0.95],
+          }),
+        },
+        {
+          translateY: animatedValue.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 3],
+          }),
+        },
+      ],
+      shadowOpacity: animatedValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.25, 0.1],
+      }),
+    };
+
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <Animated.View style={[
+          styles.buttonBase,
+          isStop ? styles.stopButton : styles.sendButton, 
+          style, 
+          animatedStyle
+        ]}>
+          {isIcon ? (
+            children
+          ) : (
+            <Text style={[styles.sendButtonText, textStyle]}>{children}</Text>
+          )}
+        </Animated.View>
+      </Pressable>
     );
   };
 
@@ -405,18 +551,29 @@ const ChatScreen = ({ route, navigation }: Props) => {
             </Text>
           </TouchableOpacity>
           <View style={styles.headerRight}>
-            <TouchableOpacity 
-              style={styles.clearButton}
+            <ButtonWithAnimation
               onPress={clearChat}
+              style={styles.clearChatButton}
+              isIcon={true}
             >
-              <Text style={styles.clearButtonText}>Clear</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.deleteModelButton}
+              <View style={styles.iconContainer}>
+                <View style={styles.chatIconOutline}>
+                  <View style={styles.chatIconInner}>
+                    <View style={styles.chatIconLine} />
+                  </View>
+                </View>
+              </View>
+            </ButtonWithAnimation>
+            <ButtonWithAnimation
               onPress={handleDeleteModel}
+              style={styles.deleteButton}
+              isIcon={true}
             >
-              <Text style={styles.deleteModelText}>Delete Brain</Text>
-            </TouchableOpacity>
+              <View style={styles.iconContainer}>
+                <View style={styles.xLine1} />
+                <View style={styles.xLine2} />
+              </View>
+            </ButtonWithAnimation>
           </View>
         </View>
         
@@ -425,29 +582,36 @@ const ChatScreen = ({ route, navigation }: Props) => {
           ref={scrollViewRef}
           onScroll={handleScroll}
           scrollEventThrottle={16}
+          contentContainerStyle={styles.scrollViewContent}
         >
           <View style={styles.chatWrapper}>
-            <Text style={styles.modelName}>{selectedModel}</Text>
             <View style={styles.chatContainer}>
               <Text style={styles.greetingText}>
                 🦙 Welcome! The Llama is ready to chat. Ask away! 🎉
               </Text>
               {conversation.slice(1).map((msg, index) => (
                 <View key={index} style={styles.messageWrapper}>
-                  <View
-                    style={[
-                      styles.messageBubble,
-                      msg.role === 'user'
-                        ? styles.userBubble
-                        : styles.llamaBubble,
-                    ]}
-                  >
-                    <Text
+                  {msg.role === 'user' ? (
+                    <View
                       style={[
-                        styles.messageText,
-                        msg.role === 'user' && styles.userMessageText,
+                        styles.messageBubble,
+                        styles.userBubble,
                       ]}
                     >
+                      <Text
+                        style={[
+                          styles.messageText,
+                          styles.userMessageText,
+                        ]}
+                      >
+                        <Markdown>{msg.content}</Markdown>
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.assistantMessageContainer}>
+                      <Text style={styles.assistantMessageText}>
+                        <Markdown>{msg.content}</Markdown>
+                      </Text>
                       {msg.thought && (
                         <TouchableOpacity
                           onPress={() => toggleThought(index + 1)}
@@ -470,20 +634,19 @@ const ChatScreen = ({ route, navigation }: Props) => {
                           </Text>
                         </View>
                       )}
-                      <Markdown>{msg.content}</Markdown>
-                    </Text>
-                  </View>
-                  {msg.role === 'assistant' && tokensPerSecond[Math.floor(index / 2)] && (
-                    <Text style={styles.tokenInfo}>
-                      {tokensPerSecond[Math.floor(index / 2)]} tokens/s
-                    </Text>
+                      {tokensPerSecond[Math.floor(index / 2)] && (
+                        <Text style={styles.tokenInfo}>
+                          {tokensPerSecond[Math.floor(index / 2)]} tokens/s
+                        </Text>
+                      )}
+                    </View>
                   )}
                 </View>
               ))}
               
               {!context && (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#2563EB" />
+                  <ActivityIndicator size="large" color={COLORS.primary} />
                   <Text style={styles.loadingText}>Loading model...</Text>
                 </View>
               )}
@@ -502,22 +665,22 @@ const ChatScreen = ({ route, navigation }: Props) => {
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isGenerating}
+            placeholderTextColor="#999"
           />
           {isGenerating ? (
-            <TouchableOpacity
-              style={[styles.sendButton, styles.stopButton]}
+            <ButtonWithAnimation
               onPress={stopGeneration}
+              isStop={true}
             >
-              <Text style={styles.sendButtonText}>Stop</Text>
-            </TouchableOpacity>
+              Stop
+            </ButtonWithAnimation>
           ) : (
-            <TouchableOpacity
-              style={styles.sendButton}
+            <ButtonWithAnimation
               onPress={handleSendMessage}
-              disabled={!userInput.trim() || !context}
+              style={!userInput.trim() || !context ? styles.sendButtonDisabled : {}}
             >
-              <Text style={styles.sendButtonText}>Send</Text>
-            </TouchableOpacity>
+              Send
+            </ButtonWithAnimation>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -535,7 +698,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.background,
   },
   header: {
     flexDirection: 'row',
@@ -543,7 +706,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: 'rgba(30, 62, 31, 0.1)',
+    backgroundColor: COLORS.background,
   },
   backButton: {
     padding: 8,
@@ -551,129 +715,191 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 24,
     fontWeight: 'bold',
+    color: COLORS.text,
   },
   personaButton: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(225, 79, 41, 0.1)',
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
   personaButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
+    color: COLORS.text,
+    fontFamily: FONTS.primary,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  clearButton: {
-    padding: 8,
+  clearChatButton: {
+    backgroundColor: '#F5A623', // Yellow color
+    width: 44,
+    height: 44,
+    shadowOpacity: 0.25,
+    borderBottomWidth: 3,
+    borderRightWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
+    borderRightColor: 'rgba(0, 0, 0, 0.2)',
   },
-  clearButtonText: {
-    color: '#e14f29',
-    fontWeight: '600',
+  deleteButton: {
+    backgroundColor: '#FF3B30', // Red color
+    width: 44,
+    height: 44,
+    shadowOpacity: 0.25,
+    borderBottomWidth: 3,
+    borderRightWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
+    borderRightColor: 'rgba(0, 0, 0, 0.2)',
   },
-  deleteModelButton: {
-    marginLeft: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: '#fee2e2',
-    borderRadius: 12,
+  iconContainer: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  deleteModelText: {
-    color: '#dc2626',
-    fontSize: 12,
-    fontWeight: '600',
+  chatIconOutline: {
+    width: 18,
+    height: 14,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    borderRadius: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  chatIconInner: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatIconLine: {
+    width: 8,
+    height: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1,
+  },
+  xLine1: {
+    width: 16,
+    height: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1,
+    position: 'absolute',
+    transform: [{ rotate: '45deg' }],
+  },
+  xLine2: {
+    width: 16,
+    height: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1,
+    position: 'absolute',
+    transform: [{ rotate: '-45deg' }],
   },
   scrollView: {
     flex: 1,
+  },
+  scrollViewContent: {
+    flexGrow: 1,
   },
   chatWrapper: {
     flex: 1,
     padding: 16,
   },
-  modelName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
   chatContainer: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
   },
   greetingText: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
-    marginVertical: 12,
-    color: '#64748B',
+    marginVertical: 20,
+    color: COLORS.lightText,
+    fontFamily: FONTS.primary,
   },
   messageWrapper: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   messageBubble: {
-    padding: 12,
-    borderRadius: 12,
-    maxWidth: '85%',
+    padding: Math.max(10, width * 0.025),
+    borderRadius: 18,
+    maxWidth: '70%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#3B82F6',
-  },
-  llamaBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: COLORS.userBubble,
   },
   messageText: {
-    fontSize: 16,
-    color: '#334155',
+    fontSize: Math.min(17, width * 0.045),
+    color: COLORS.text,
+    lineHeight: Math.min(25, width * 0.06),
+    fontFamily: FONTS.primary,
   },
   userMessageText: {
-    color: '#FFFFFF',
+    color: COLORS.text,
+  },
+  assistantMessageContainer: {
+    alignSelf: 'flex-start',
+    maxWidth: '90%',
+    marginBottom: 8,
+  },
+  assistantMessageText: {
+    fontSize: Math.min(18, width * 0.046),
+    color: COLORS.text,
+    lineHeight: Math.min(27, width * 0.065),
+    marginBottom: 8,
+    fontFamily: FONTS.primary,
   },
   thoughtContainer: {
     marginTop: 8,
     padding: 10,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'rgba(225, 79, 41, 0.05)',
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#94A3B8',
+    borderLeftColor: COLORS.primary,
   },
   thoughtTitle: {
-    color: '#64748B',
-    fontSize: 12,
+    color: COLORS.lightText,
+    fontSize: 13,
     fontWeight: '600',
     marginBottom: 4,
+    fontFamily: FONTS.secondary,
   },
   thoughtText: {
-    color: '#475569',
-    fontSize: 12,
+    color: COLORS.lightText,
+    fontSize: 13,
     fontStyle: 'italic',
-    lineHeight: 16,
+    lineHeight: 18,
+    fontFamily: FONTS.secondary,
   },
   toggleButton: {
     marginTop: 8,
     paddingVertical: 4,
   },
   toggleText: {
-    color: '#3B82F6',
-    fontSize: 12,
+    color: COLORS.primary,
+    fontSize: 13,
     fontWeight: '500',
+    fontFamily: FONTS.secondary,
   },
   tokenInfo: {
-    fontSize: 12,
-    color: '#94A3B8',
+    fontSize: 11,
+    color: COLORS.lightText,
     marginTop: 4,
     textAlign: 'right',
+    opacity: 0.7,
+    fontFamily: FONTS.secondary,
   },
   loadingContainer: {
     padding: 24,
@@ -682,52 +908,74 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 14,
-    color: '#64748B',
+    fontSize: 15,
+    color: COLORS.lightText,
+    fontFamily: FONTS.primary,
   },
   inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(30, 62, 31, 0.1)',
   },
   input: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#334155',
-    minHeight: 50,
+    borderColor: 'rgba(30, 62, 31, 0.1)',
+    borderRadius: 30,
+    padding: Math.max(12, width * 0.03),
+    paddingHorizontal: Math.max(16, width * 0.04),
+    fontSize: Math.min(17, width * 0.042),
+    color: COLORS.text,
+    marginRight: 10,
+    fontFamily: FONTS.primary,
   },
   sendButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    shadowColor: '#3B82F6',
+    backgroundColor: COLORS.primary,
+    width: 54,
+    height: 54,
+    shadowOpacity: 0.25,
+    borderBottomWidth: 3,
+    borderRightWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
+    borderRightColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  stopButton: {
+    backgroundColor: '#FF3B30',
+    width: 54,
+    height: 54,
+    shadowOpacity: 0.3,
+    shadowColor: '#FF3B30',
+    borderBottomWidth: 3,
+    borderRightWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
+    borderRightColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  sendButtonDisabled: {
+    backgroundColor: COLORS.primary,
+    shadowOpacity: 0.4,
+  },
+  sendButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    fontFamily: FONTS.primary,
+  },
+  buttonBase: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 25,
+    shadowColor: 'rgba(0, 0, 0, 0.5)',
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-  },
-  stopButton: {
-    backgroundColor: '#FF3B30',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-  },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
+    shadowRadius: 4,
+    elevation: 4,
   },
 });
 

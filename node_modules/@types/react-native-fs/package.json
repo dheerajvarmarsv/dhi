@@ -1,0 +1,30 @@
+{
+    "name": "@types/react-native-fs",
+    "version": "2.8.3",
+    "description": "TypeScript definitions for react-native-fs",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Paulo Cesar",
+            "url": "https://github.com/pocesar",
+            "githubUsername": "pocesar"
+        },
+        {
+            "name": "Joseph Roque",
+            "url": "https://github.com/josephroque",
+            "githubUsername": "josephroque"
+        }
+    ],
+    "main": "",
+    "types": "index",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/react-native": "*"
+    },
+    "typesPublisherContentHash": "a095a73d23bb5d2d37f3e3a954e6bcb164c6eb8ad598d1ab871a4a3bdf1f85e0",
+    "typeScriptVersion": "2.8"
+}

@@ -168,22 +168,22 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
     let textAnimationTimeout: NodeJS.Timeout;
     
     const animateText = () => {
-      // Fade out
+      // Fade out faster
       Animated.timing(textFadeAnim, {
         toValue: 0,
-        duration: 500,
+        duration: 300,
         useNativeDriver: true,
       }).start(() => {
-        // Change text and fade in
+        // Change text and fade in faster
         setCurrentTextIndex((prevIndex) => (prevIndex + 1) % taglineWords.length);
         Animated.timing(textFadeAnim, {
           toValue: 1,
-          duration: 500,
+          duration: 300,
           useNativeDriver: true,
         }).start();
         
-        // Schedule next animation
-        textAnimationTimeout = setTimeout(animateText, 2000);
+        // Schedule next animation - faster interval
+        textAnimationTimeout = setTimeout(animateText, 800);
       });
     };
     
@@ -394,15 +394,17 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
                 </Animated.View>
                 <View style={styles.textContainer}>
                   <View style={styles.taglineContainer}>
-                    <Text style={styles.percentText}>100% </Text>
-                    <Animated.Text 
-                      style={[
-                        styles.changingText,
-                        { opacity: textFadeAnim }
-                      ]}
-                    >
-                      {taglineWords[currentTextIndex]}
-                    </Animated.Text>
+                    <Text style={styles.percentText}>100%</Text>
+                    <View style={styles.changingTextContainer}>
+                      <Animated.Text 
+                        style={[
+                          styles.changingText,
+                          { opacity: textFadeAnim }
+                        ]}
+                      >
+                        {taglineWords[currentTextIndex]}
+                      </Animated.Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -520,6 +522,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    height: Math.min(50, width * 0.1),
   },
   percentText: {
     fontSize: Math.min(32, width * 0.08),
@@ -528,6 +532,12 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
+  },
+  changingTextContainer: {
+    marginLeft: 5, // Space between 100% and the changing word
+    minWidth: Math.min(160, width * 0.4), // Reserve space for the word
+    height: '100%',
+    justifyContent: 'center',
   },
   changingText: {
     fontSize: Math.min(32, width * 0.08),
