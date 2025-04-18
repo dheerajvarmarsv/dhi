@@ -13,4 +13,5 @@ export type ChatSession = {
   lastMessage: string;
   timestamp: number;
   messages: Message[];
+  personaId?: string; // Persona/template ID used for this chat
 }; 

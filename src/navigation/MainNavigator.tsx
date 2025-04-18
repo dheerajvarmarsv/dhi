@@ -15,7 +15,7 @@ export type RootStackParamList = {
   SignIn: undefined;
   PhoneNumber: undefined;
   ModelSelection: undefined;
-  Chat: { selectedModel: string };
+  Chat: { selectedModel: string; chatId?: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

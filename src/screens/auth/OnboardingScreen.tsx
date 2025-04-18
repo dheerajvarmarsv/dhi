@@ -1,10 +1,10 @@
 // src/screens/auth/OnboardingScreen.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Image, 
   SafeAreaView,
   Dimensions,
   TouchableOpacity,
@@ -272,8 +272,11 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
       setIsChecking(false);
       
       if (modelExists) {
-        // If model exists, go directly to Chat
-        navigation.navigate('Chat', { selectedModel: MODEL_FILENAME });
+        // Navigate to Chat screen with the model filename
+        navigation.navigate('Chat', { 
+          selectedModel: MODEL_FILENAME,
+          // Don't pass chatId so it will create a new chat
+        });
       } else {
         // If model doesn't exist, go to download screen
         navigation.navigate('ModelSelection');
@@ -323,38 +326,38 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
             {screen.type === 'first' ? (
               // First screen with robot image and logo
               <View style={styles.firstScreenContainer}>
-                <Animated.View 
-                  style={[
+        <Animated.View 
+          style={[
                     styles.topImageContainer,
-                    {
-                      opacity: fadeAnim,
+            { 
+              opacity: fadeAnim,
                       transform: [
                         { scale: scaleAnim },
                       ]
-                    }
-                  ]}
-                >
-                  <Image
+            }
+          ]}
+        >
+          <Image 
                     source={screen.topImage}
                     style={styles.topImage}
                     resizeMode="contain"
-                  />
-                </Animated.View>
-                <Animated.View 
-                  style={[
+          />
+        </Animated.View>
+        <Animated.View 
+          style={[
                     styles.bottomImageContainer,
-                    {
+            { 
                       transform: [
                         { translateY },
                       ]
-                    }
-                  ]}
-                >
-                  <Image
+            }
+          ]}
+        >
+          <Image
                     source={screen.bottomImage}
-                    style={styles.logoImage}
-                    resizeMode="contain"
-                  />
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
                 </Animated.View>
               </View>
             ) : screen.type === 'second' ? (

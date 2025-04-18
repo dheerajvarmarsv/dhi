@@ -14,40 +14,31 @@ import {
   Dimensions,
   Animated,
   Pressable,
+  StatusBar,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { initLlama, releaseAllLlama } from 'llama.rn';
 import RNFS from 'react-native-fs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { saveChatHistory, loadChatHistory, clearChatHistory } from '../utils/chatStorage';
-import { formatPrompt, promptTemplates } from '../utils/promptTemplates';
+import { 
+  loadChatSession, 
+  updateChatSession, 
+  createChatSession,
+  deleteChatSession,
+  getChatsByModel
+} from '../utils/chatStorage';
+import { formatPrompt, promptTemplates, getAllPersonas, PromptTemplate } from '../utils/promptTemplates';
 import PersonaSelector from '../components/PersonaSelector';
-import { Message } from '../types';
+import ChatSidebar from '../components/ChatSidebar';
+import { Message, ChatSession } from '../types';
+import { COLORS, FONTS } from '../constants/theme';
 
 // Get device dimensions for responsive design
 const { width, height } = Dimensions.get('window');
 
-// App theme colors - consistent with onboarding
-const COLORS = {
-  primary: '#e14f29', // Orange primary color from Get Started button
-  background: '#f5f0e6', // Soft beige background like in the image
-  userBubble: '#f0e6d9', // Light beige/cream color for user bubbles
-  assistantBubble: '#FFFFFF', // White for assistant messages
-  text: '#1e3e1f', // Dark green text like Pi app
-  lightText: '#5a6955', // Lighter green-gray text
-  border: '#E2E8F0', // Border color
-}
-
-// Update font family and increase font sizes
-const FONTS = {
-  primary: 'Noto Sans',
-  secondary: 'Noto Sans',
-  fallback: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif',
-};
-
 type RootStackParamList = {
-  Chat: { selectedModel: string };
+  Chat: { selectedModel: string; chatId?: string };
   ModelSelection: undefined;
 };
 
@@ -57,7 +48,7 @@ type Props = {
 };
 
 const ChatScreen = ({ route, navigation }: Props) => {
-  const { selectedModel } = route.params;
+  const { selectedModel, chatId } = route.params;
   const INITIAL_CONVERSATION: Message[] = [
     {
       role: 'system',
@@ -65,25 +56,33 @@ const ChatScreen = ({ route, navigation }: Props) => {
     },
   ];
   
+  const [currentChatId, setCurrentChatId] = useState<string | null>(chatId || null);
+  const [chatTitle, setChatTitle] = useState<string>('New Chat');
   const [context, setContext] = useState<any>(null);
   const [conversation, setConversation] = useState<Message[]>(INITIAL_CONVERSATION);
   const [userInput, setUserInput] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [tokensPerSecond, setTokensPerSecond] = useState<number[]>([]);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>('general');
   const [personaSelectorVisible, setPersonaSelectorVisible] = useState<boolean>(false);
+  const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollPositionRef = useRef(0);
   const contentHeightRef = useRef(0);
+  const titleInputRef = useRef<TextInput>(null);
 
-  // Load the model and chat history when component mounts
+  const [inputHeight, setInputHeight] = useState(45);
+
+  // Load the model and chat when component mounts
   useEffect(() => {
     loadModel(selectedModel);
-    loadChat();
+    checkExistingChats();
     
-    // Cleanup on unmount
+    // Clean up duplicate "New Chat" sessions when component mounts
+    cleanupDuplicateNewChats();
+    
     return () => {
       if (context) {
         releaseAllLlama();
@@ -91,11 +90,160 @@ const ChatScreen = ({ route, navigation }: Props) => {
     };
   }, [selectedModel]);
   
-  const loadChat = async () => {
-    const history = await loadChatHistory(selectedModel);
-    if (history && history.messages.length > 0) {
-      setConversation(history.messages);
-      setSelectedPersonaId(history.personaId || 'general');
+  const cleanupDuplicateNewChats = async () => {
+    try {
+      const existingChats = await getChatsByModel(selectedModel);
+      const newChats = existingChats.filter(chat => chat.title === 'New Chat');
+      
+      if (newChats.length > 1) {
+        // Keep the most recent "New Chat" and delete others
+        const [mostRecent, ...duplicates] = newChats;
+        
+        // Delete all duplicate "New Chat" sessions
+        for (const chat of duplicates) {
+          await deleteChatSession(chat.id);
+        }
+        
+        // If current chat was one of the deleted ones, switch to the kept one
+        if (currentChatId && duplicates.some(chat => chat.id === currentChatId)) {
+          await loadSpecificChat(mostRecent.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error cleaning up duplicate new chats:', error);
+    }
+  };
+
+  const checkExistingChats = async () => {
+    try {
+      // First clean up any duplicate "New Chat" sessions
+      await cleanupDuplicateNewChats();
+      
+      const existingChats = await getChatsByModel(selectedModel);
+      
+      // If there's a specific chatId to load
+      if (chatId) {
+        const chatExists = await loadChatSession(chatId);
+        if (chatExists) {
+          await loadSpecificChat(chatId);
+          return;
+        }
+      }
+      
+      // Look for the single "New Chat"
+      const newChat = existingChats.find(chat => chat.title === 'New Chat');
+      
+      if (newChat) {
+        await loadSpecificChat(newChat.id);
+        return;
+      }
+      
+      // If no chats exist at all, create a new one
+      if (existingChats.length === 0) {
+        await createNewChat();
+        return;
+      }
+      
+      // Load most recent chat
+      await loadSpecificChat(existingChats[0].id);
+      
+    } catch (error) {
+      console.error('Error checking existing chats:', error);
+      if (!currentChatId) {
+        await createNewChat();
+      }
+    }
+  };
+  
+  // Load a specific chat when the chatId changes in route params
+  useEffect(() => {
+    if (chatId && chatId !== currentChatId) {
+      loadSpecificChat(chatId);
+    }
+  }, [chatId]);
+  
+  const loadSpecificChat = async (id: string) => {
+    try {
+      const chatSession = await loadChatSession(id);
+      if (chatSession) {
+        setConversation(chatSession.messages || INITIAL_CONVERSATION);
+        setSelectedPersonaId(chatSession.personaId || 'general');
+        setChatTitle(chatSession.title || 'New Chat');
+        setCurrentChatId(id);
+        
+        // Update navigation params without triggering a navigation
+        navigation.setParams({ chatId: id });
+      } else {
+        // If chat doesn't exist, look for an existing "New Chat" first
+        const existingChats = await getChatsByModel(selectedModel);
+        const newChat = existingChats.find(chat => chat.title === 'New Chat');
+        
+        if (newChat) {
+          await loadSpecificChat(newChat.id);
+        } else {
+          await createNewChat();
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat:', error);
+      // Only create a new chat if we have no current chat
+      if (!currentChatId) {
+        await createNewChat();
+      }
+    }
+  };
+  
+  const createNewChat = async () => {
+    try {
+      // Create a new initial conversation with the selected persona's system prompt
+      let initialConversation = [...INITIAL_CONVERSATION];
+      try {
+        const allPersonas = await getAllPersonas();
+        const selectedTemplate = allPersonas.find((p: PromptTemplate) => p.id === selectedPersonaId);
+        if (selectedTemplate && initialConversation.length > 0 && initialConversation[0].role === 'system') {
+          initialConversation[0] = {
+            ...initialConversation[0],
+            content: selectedTemplate.systemPrompt
+          };
+        }
+      } catch (error) {
+        console.error('Error getting persona for new chat:', error);
+      }
+      
+      const newChat = await createChatSession(
+        selectedModel, 
+        'New Chat', 
+        initialConversation,
+        selectedPersonaId // Pass the selected persona ID
+      );
+      
+      if (newChat) {
+        setCurrentChatId(newChat.id);
+        setChatTitle(newChat.title);
+        setConversation(initialConversation);
+        
+        // Update navigation params without triggering a navigation
+        navigation.setParams({ chatId: newChat.id });
+        
+        return newChat;
+      }
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      setConversation(INITIAL_CONVERSATION);
+    }
+    return null;
+  };
+  
+  const saveChat = async () => {
+    if (!currentChatId) return;
+    
+    try {
+      await updateChatSession(currentChatId, {
+        messages: conversation,
+        personaId: selectedPersonaId
+      });
+    } catch (error) {
+      console.error('Error saving chat:', error);
     }
   };
 
@@ -106,7 +254,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       
       if (!fileExists) {
         Alert.alert('Error', 'Model file not found. Please download it first.');
-        navigation.goBack();
+        navigation.navigate('ModelSelection');
         return;
       }
       
@@ -121,7 +269,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Alert.alert('Error Loading Model', errorMessage);
-      navigation.goBack();
+      navigation.navigate('ModelSelection');
     }
   };
 
@@ -154,6 +302,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
       return;
     }
 
+    // Ensure we have a valid chat ID before sending a message
+    if (!currentChatId) {
+      await createNewChat();
+      if (!currentChatId) {
+        Alert.alert('Error', 'Could not create a chat. Please try again.');
+        return;
+      }
+    }
+
     const newUserMessage: Message = { role: 'user', content: userInput };
     const updatedConversation = [...conversation, newUserMessage];
     setConversation(updatedConversation);
@@ -162,6 +319,18 @@ const ChatScreen = ({ route, navigation }: Props) => {
     setAutoScrollEnabled(true);
 
     try {
+      // If this is the first user message and the chat title is "New Chat",
+      // automatically rename it using the first 20 characters
+      if (chatTitle === 'New Chat' && conversation.length === 1) {
+        const newTitle = userInput.trim().slice(0, 20);
+        setChatTitle(newTitle);
+        if (currentChatId) {
+          await updateChatSession(currentChatId, {
+            title: newTitle
+          });
+        }
+      }
+
       const stopWords = [
         '</s>',
         '<|end|>',
@@ -169,11 +338,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
         'assistant:',
         '<|im_end|>',
         '<|eot_id|>',
-      ];
-      const endOfSentenceTokens = [
-        '<|end▁of▁sentence|>',
-        '<|end_of_text|>',
-        '<｜end of sentence｜>',
       ];
       
       // Format with the selected persona's prompt template
@@ -305,18 +469,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
           }
         }
       );
-
-      // Save chat history after completion
-      await saveChatHistory(
-        selectedModel, 
-        conversation, 
-        selectedPersonaId
-      );
-
-      setTokensPerSecond((prev) => [
-        ...prev,
-        parseFloat(result.timings.predicted_per_second.toFixed(2)),
-      ]);
+      
+      // Save chat after completion
+      await saveChat();
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Alert.alert('Error During Inference', errorMessage);
@@ -382,6 +538,62 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   };
 
+  // Check if the current chat has any user messages
+  const hasUserMessages = () => {
+    if (conversation.length <= 1) return false; // Only system message
+    
+    // Check if there are any user messages
+    return conversation.some(msg => msg.role === 'user');
+  };
+
+  // Check if chat is empty (only has system message)
+  const isChatEmpty = () => {
+    return conversation.length <= 1;
+  };
+
+  const handleNewChat = async () => {
+    setSidebarVisible(false);
+    
+    try {
+      // Clean up any duplicate "New Chat" sessions first
+      await cleanupDuplicateNewChats();
+      
+      // Save current chat if needed
+      if (currentChatId && !isChatEmpty()) {
+        await saveChat();
+      }
+      
+      const existingChats = await getChatsByModel(selectedModel);
+      const existingNewChat = existingChats.find(chat => chat.title === 'New Chat');
+      
+      if (existingNewChat) {
+        // If we're already on the "New Chat" and it's empty, just reset it
+        if (currentChatId === existingNewChat.id && isChatEmpty()) {
+          setConversation(INITIAL_CONVERSATION);
+          return;
+        }
+        
+        // Switch to the existing "New Chat"
+        await loadSpecificChat(existingNewChat.id);
+        return;
+      }
+      
+      // Delete current chat if it's empty before creating new one
+      if (currentChatId && isChatEmpty()) {
+        await deleteChatSession(currentChatId);
+      }
+      
+      // Create new chat only if no "New Chat" exists
+      await createNewChat();
+      
+    } catch (error) {
+      console.error('Error in handleNewChat:', error);
+      if (!currentChatId) {
+        await createNewChat();
+      }
+    }
+  };
+
   const clearChat = async () => {
     Alert.alert(
       'Clear Chat',
@@ -395,8 +607,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
-            await clearChatHistory(selectedModel);
-            setConversation(INITIAL_CONVERSATION);
+            const cleared = [...INITIAL_CONVERSATION];
+            setConversation(cleared);
+            
+            // Save the cleared chat
+            if (currentChatId) {
+              await updateChatSession(currentChatId, {
+                messages: cleared
+              });
+            }
           },
         },
       ]
@@ -407,55 +626,149 @@ const ChatScreen = ({ route, navigation }: Props) => {
     setSelectedPersonaId(personaId);
     
     // Update system message
-    const selectedTemplate = promptTemplates.find(p => p.id === personaId);
-    if (selectedTemplate) {
-      // If we have messages, update the system message
-      if (conversation.length > 0 && conversation[0].role === 'system') {
-        const updatedConversation = [...conversation];
-        updatedConversation[0] = {
-          ...updatedConversation[0],
-          content: selectedTemplate.systemPrompt
-        };
-        setConversation(updatedConversation);
-        
-        // Save the updated conversation
-        await saveChatHistory(selectedModel, updatedConversation, personaId);
+    // First, find the persona from both built-in and custom personas
+    try {
+      const allPersonas = await getAllPersonas();
+      const selectedTemplate = allPersonas.find((p: PromptTemplate) => p.id === personaId) || promptTemplates[0];
+      
+      if (selectedTemplate) {
+        // If we have messages, update the system message
+        if (conversation.length > 0 && conversation[0].role === 'system') {
+          const updatedConversation = [...conversation];
+          updatedConversation[0] = {
+            ...updatedConversation[0],
+            content: selectedTemplate.systemPrompt
+          };
+          setConversation(updatedConversation);
+          
+          // Save the updated conversation
+          if (currentChatId) {
+            await updateChatSession(currentChatId, {
+              messages: updatedConversation,
+              personaId
+            });
+          }
+        }
       }
+    } catch (error) {
+      console.error('Error updating persona:', error);
     }
   };
 
-  const selectedPersona = promptTemplates.find(p => p.id === selectedPersonaId) || promptTemplates[0];
-
-  const handleDeleteModel = () => {
-    Alert.alert(
-      'Delete DHI',
-      'Are you sure? You will need to download the DHI again to use.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const destPath = `${RNFS.DocumentDirectoryPath}/${selectedModel}`;
-              if (await RNFS.exists(destPath)) {
-                await RNFS.unlink(destPath);
-                Alert.alert('Success', 'AI deleted successfully');
-                // Navigate back to model selection
-                navigation.replace('ModelSelection');
-              }
-            } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              Alert.alert('Error', `Failed to delete: ${errorMessage}`);
-            }
-          }
+  const handleRenameChat = () => {
+    if (!currentChatId) return;
+    
+    const promptRename = (newTitle?: string) => {
+      if (newTitle && newTitle.trim()) {
+        const trimmedTitle = newTitle.trim().slice(0, 20);
+        
+        // Prevent renaming to "New Chat"
+        if (trimmedTitle.toLowerCase() === 'new chat') {
+          Alert.alert(
+            'Invalid Name',
+            'Cannot rename a chat to "New Chat". Please choose a different name.'
+          );
+          return;
         }
-      ]
-    );
+        
+        setChatTitle(trimmedTitle);
+        if (currentChatId) {
+          updateChatSession(currentChatId, {
+            title: trimmedTitle
+          });
+        }
+      }
+    };
+    
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Rename Chat',
+        'Enter a new name (max 20 characters):',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save', onPress: promptRename }
+        ],
+        'plain-text',
+        chatTitle
+      );
+    } else {
+      setIsEditingTitle(true);
+    }
   };
+  
+  const handleTitleSubmit = async (newTitle: string) => {
+    const trimmedTitle = newTitle.trim().slice(0, 20);
+    
+    // Prevent renaming to "New Chat"
+    if (trimmedTitle.toLowerCase() === 'new chat') {
+      Alert.alert(
+        'Invalid Name',
+        'Cannot rename a chat to "New Chat". Please choose a different name.'
+      );
+      return;
+    }
+    
+    if (trimmedTitle) {
+      setChatTitle(trimmedTitle);
+      if (currentChatId) {
+        await updateChatSession(currentChatId, {
+          title: trimmedTitle
+        });
+      }
+    }
+    setIsEditingTitle(false);
+  };
+  
+  const handleChatSelect = async (chatId: string) => {
+    // Hide sidebar first for smoother transition
+    setSidebarVisible(false);
+    
+    try {
+      // Make sure the current chat is saved before switching
+      if (currentChatId && !isChatEmpty()) {
+        await saveChat();
+      }
+      
+      // Navigate to the selected chat
+      navigation.setParams({ chatId });
+      await loadSpecificChat(chatId);
+    } catch (error) {
+      console.error('Error selecting chat:', error);
+      Alert.alert('Error', 'Could not load selected chat.');
+    }
+  };
+  
+  const handleToggleSidebar = () => {
+    // If opening the sidebar, ensure chat is visible
+    if (!sidebarVisible) {
+      ensureVisibleChat();
+    }
+    setSidebarVisible(prev => !prev);
+  };
+  
+  const handleBackToModelSelection = () => {
+    setSidebarVisible(false);
+    navigation.navigate('ModelSelection');
+  };
+
+  const [selectedPersona, setSelectedPersona] = useState<PromptTemplate>(promptTemplates[0]);
+
+  useEffect(() => {
+    const loadSelectedPersona = async () => {
+      try {
+        const allPersonas = await getAllPersonas();
+        const persona = allPersonas.find((p: PromptTemplate) => p.id === selectedPersonaId) || promptTemplates[0];
+        setSelectedPersona(persona);
+      } catch (error) {
+        console.error('Error loading selected persona:', error);
+        // Fallback to default persona
+        const defaultPersona = promptTemplates.find(p => p.id === selectedPersonaId) || promptTemplates[0];
+        setSelectedPersona(defaultPersona);
+      }
+    };
+    
+    loadSelectedPersona();
+  }, [selectedPersonaId]);
 
   // Update the ButtonWithAnimation component to support icons
   const ButtonWithAnimation = ({ 
@@ -465,6 +778,13 @@ const ChatScreen = ({ route, navigation }: Props) => {
     children, 
     isStop = false,
     isIcon = false
+  }: {
+    onPress: () => void;
+    style?: any;
+    textStyle?: any;
+    children: React.ReactNode;
+    isStop?: boolean;
+    isIcon?: boolean;
   }) => {
     const animatedValue = useRef(new Animated.Value(0)).current;
 
@@ -529,31 +849,82 @@ const ChatScreen = ({ route, navigation }: Props) => {
     );
   };
 
+  const handleContentSizeChange = (event: { nativeEvent: { contentSize: { height: number } } }) => {
+    const height = Math.min(100, Math.max(45, event.nativeEvent.contentSize.height));
+    setInputHeight(height);
+  };
+
+  // Ensure that there's always at least one visible chat
+  const ensureVisibleChat = async () => {
+    try {
+      // Check if we have a current chat ID
+      if (!currentChatId) {
+        console.log('No current chat ID, creating new chat');
+        await createNewChat();
+        return;
+      }
+      
+      // Check if the current chat exists in storage
+      const chatExists = await loadChatSession(currentChatId);
+      if (!chatExists) {
+        console.log('Current chat not found in storage, creating new chat');
+        await createNewChat();
+      }
+    } catch (error) {
+      console.error('Error ensuring visible chat:', error);
+      await createNewChat();
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 45 : 0}
       >
+        {/* Chat Sidebar */}
+        <ChatSidebar 
+          isVisible={sidebarVisible}
+          selectedModel={selectedModel}
+          currentChatId={currentChatId}
+          onClose={() => setSidebarVisible(false)}
+          onChatSelect={handleChatSelect}
+          onNewChat={handleNewChat}
+          onBackToModelSelection={handleBackToModelSelection}
+        />
+        
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.personaButton}
-            onPress={() => setPersonaSelectorVisible(true)}
-          >
-            <Text style={styles.personaButtonText}>
-              {selectedPersona.icon} {selectedPersona.name}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity 
+              style={styles.menuButton}
+              onPress={handleToggleSidebar}
+            >
+              <View style={styles.menuButtonIcon}>
+                <View style={styles.menuLine} />
+                <View style={styles.menuLine} />
+                <View style={styles.menuLine} />
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.headerCenter}>
+            <TouchableOpacity 
+              style={styles.personaButton}
+              onPress={() => setPersonaSelectorVisible(true)}
+            >
+              <Text style={styles.personaButtonText}>
+                {selectedPersona.icon} {selectedPersona.name}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.headerRight}>
             <ButtonWithAnimation
               onPress={clearChat}
               style={styles.clearChatButton}
+              textStyle={{}}
               isIcon={true}
             >
               <View style={styles.iconContainer}>
@@ -562,16 +933,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
                     <View style={styles.chatIconLine} />
                   </View>
                 </View>
-              </View>
-            </ButtonWithAnimation>
-            <ButtonWithAnimation
-              onPress={handleDeleteModel}
-              style={styles.deleteButton}
-              isIcon={true}
-            >
-              <View style={styles.iconContainer}>
-                <View style={styles.xLine1} />
-                <View style={styles.xLine2} />
               </View>
             </ButtonWithAnimation>
           </View>
@@ -583,11 +944,12 @@ const ChatScreen = ({ route, navigation }: Props) => {
           onScroll={handleScroll}
           scrollEventThrottle={16}
           contentContainerStyle={styles.scrollViewContent}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.chatWrapper}>
             <View style={styles.chatContainer}>
               <Text style={styles.greetingText}>
-                🦙 Welcome! The Llama is ready to chat. Ask away! 🎉
+                {selectedPersona.icon} Welcome! {selectedPersona.name} is ready to help. Ask away! 🎉
               </Text>
               {conversation.slice(1).map((msg, index) => (
                 <View key={index} style={styles.messageWrapper}>
@@ -634,11 +996,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
                           </Text>
                         </View>
                       )}
-                      {tokensPerSecond[Math.floor(index / 2)] && (
-                        <Text style={styles.tokenInfo}>
-                          {tokensPerSecond[Math.floor(index / 2)]} tokens/s
-                        </Text>
-                      )}
                     </View>
                   )}
                 </View>
@@ -656,28 +1013,45 @@ const ChatScreen = ({ route, navigation }: Props) => {
         
         <View style={styles.inputContainer}>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                height: inputHeight,
+                minHeight: 40,
+                maxHeight: 80
+              }
+            ]}
             placeholder="Type your message..."
             value={userInput}
             onChangeText={setUserInput}
             multiline
+            scrollEnabled={true}
+            onContentSizeChange={handleContentSizeChange}
             returnKeyType="default"
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isGenerating}
             placeholderTextColor="#999"
+            textAlignVertical="top"
+            numberOfLines={3}
           />
           {isGenerating ? (
             <ButtonWithAnimation
               onPress={stopGeneration}
               isStop={true}
+              style={styles.stopButton}
+              textStyle={{}}
             >
               Stop
             </ButtonWithAnimation>
           ) : (
             <ButtonWithAnimation
               onPress={handleSendMessage}
-              style={!userInput.trim() || !context ? styles.sendButtonDisabled : {}}
+              style={[
+                styles.sendButton,
+                !userInput.trim() || !context ? styles.sendButtonDisabled : {}
+              ]}
+              textStyle={{}}
             >
               Send
             </ButtonWithAnimation>
@@ -702,56 +1076,67 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    padding: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(30, 62, 31, 0.1)',
     backgroundColor: COLORS.background,
+    height: Platform.OS === 'ios' ? 50 : 56,
   },
-  backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  personaButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(225, 79, 41, 0.1)',
-    borderRadius: 16,
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 0.2,
   },
-  personaButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text,
-    fontFamily: FONTS.primary,
+  headerCenter: {
+    flex: 0.6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'flex-end',
+    flex: 0.2,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuButtonIcon: {
+    width: 24,
+    height: 18,
+    justifyContent: 'space-between',
+  },
+  menuLine: {
+    width: 24,
+    height: 2,
+    backgroundColor: COLORS.text,
+    borderRadius: 1,
+  },
+  personaButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(225, 79, 41, 0.05)',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  personaButtonText: {
+    fontSize: Math.min(15, width * 0.04),
+    fontWeight: '600',
+    color: COLORS.text,
+    fontFamily: FONTS.primary,
   },
   clearChatButton: {
-    backgroundColor: '#F5A623', // Yellow color
-    width: 44,
-    height: 44,
+    backgroundColor: '#F5A623',
+    width: 36,
+    height: 36,
     shadowOpacity: 0.25,
-    borderBottomWidth: 3,
-    borderRightWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
-    borderRightColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  deleteButton: {
-    backgroundColor: '#FF3B30', // Red color
-    width: 44,
-    height: 44,
-    shadowOpacity: 0.25,
-    borderBottomWidth: 3,
+    borderBottomWidth: 2,
     borderRightWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.2)',
     borderRightColor: 'rgba(0, 0, 0, 0.2)',
@@ -784,36 +1169,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 1,
   },
-  xLine1: {
-    width: 16,
-    height: 2,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 1,
-    position: 'absolute',
-    transform: [{ rotate: '45deg' }],
-  },
-  xLine2: {
-    width: 16,
-    height: 2,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 1,
-    position: 'absolute',
-    transform: [{ rotate: '-45deg' }],
-  },
   scrollView: {
     flex: 1,
+    marginBottom: 70,
   },
   scrollViewContent: {
     flexGrow: 1,
+    paddingBottom: 8,
   },
   chatWrapper: {
     flex: 1,
-    padding: 16,
+    padding: 12,
   },
   chatContainer: {
     flex: 1,
-    padding: 16,
-    marginBottom: 16,
+    padding: 12,
+    marginBottom: 8,
   },
   greetingText: {
     fontSize: 16,
@@ -824,12 +1195,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.primary,
   },
   messageWrapper: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   messageBubble: {
-    padding: Math.max(10, width * 0.025),
-    borderRadius: 18,
-    maxWidth: '70%',
+    padding: Math.max(10, width * 0.022),
+    borderRadius: 16,
+    maxWidth: '85%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -893,14 +1264,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontFamily: FONTS.secondary,
   },
-  tokenInfo: {
-    fontSize: 11,
-    color: COLORS.lightText,
-    marginTop: 4,
-    textAlign: 'right',
-    opacity: 0.7,
-    fontFamily: FONTS.secondary,
-  },
   loadingContainer: {
     padding: 24,
     alignItems: 'center',
@@ -914,45 +1277,64 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 10,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(30, 62, 31, 0.1)',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   input: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(30, 62, 31, 0.1)',
-    borderRadius: 30,
-    padding: Math.max(12, width * 0.03),
-    paddingHorizontal: Math.max(16, width * 0.04),
-    fontSize: Math.min(17, width * 0.042),
+    borderRadius: 20,
+    maxHeight: 80,
+    minHeight: 40,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
+    fontSize: Math.min(15, width * 0.04),
     color: COLORS.text,
-    marginRight: 10,
+    marginRight: 8,
     fontFamily: FONTS.primary,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+    textAlignVertical: 'top',
+    includeFontPadding: false,
   },
   sendButton: {
     backgroundColor: COLORS.primary,
-    width: 54,
-    height: 54,
+    width: 40,
+    height: 40,
     shadowOpacity: 0.25,
-    borderBottomWidth: 3,
+    borderBottomWidth: 2,
     borderRightWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.2)',
     borderRightColor: 'rgba(0, 0, 0, 0.2)',
+    alignSelf: 'flex-end',
+    marginBottom: 0,
   },
   stopButton: {
     backgroundColor: '#FF3B30',
-    width: 54,
-    height: 54,
+    width: 40,
+    height: 40,
     shadowOpacity: 0.3,
     shadowColor: '#FF3B30',
-    borderBottomWidth: 3,
+    borderBottomWidth: 2,
     borderRightWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.2)',
     borderRightColor: 'rgba(0, 0, 0, 0.2)',
+    alignSelf: 'flex-end',
+    marginBottom: 0,
   },
   sendButtonDisabled: {
     backgroundColor: COLORS.primary,

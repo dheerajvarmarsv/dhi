@@ -1,123 +1,132 @@
+import { Dimensions, Platform } from 'react-native';
+
+const { width, height } = Dimensions.get('window');
+
 export const COLORS = {
-  primary: '#1A3825', // Dark green for Pi - exact color from the images
-  primaryLight: '#F4EAE2', // Light orange/beige background - from first screen
-  secondary: '#F9A62B', // Orange accent
-  gray: '#6E6E6E',
-  lightGray: '#F4F4F4',
+  primary: '#e14f29', // Orange primary color
+  primaryLight: '#f5f0e6', // Soft beige background
+  secondary: '#1e3e1f', // Dark green
+  gray: '#8B8B8B',
+  lightGray: '#D3D3D3',
   white: '#FFFFFF',
-  black: '#292929',
-  border: '#E0E0E0',
-  error: '#FF4D4D',
-  success: '#4CAF50',
+  black: '#000000',
+  border: '#E2E8F0',
+  error: '#FF3B30',
+  success: '#4CD964',
   transparent: 'transparent',
-  featureCardBg1: '#E1D1FF', // Purple for journal card
-  featureCardBg2: '#BFE6FF', // Blue for plan card
-  featureCardBg3: '#FFDDB0', // Yellow for learn card
-  featureCardBg4: '#D3F3CF', // Green for story card
-  featureCardBg5: '#FFD6D6', // Pink for vent card
+  
+  // App-specific colors
+  background: '#f5f0e6', // Soft beige background like in the image
+  userBubble: '#f0e6d9', // Light beige/cream color for user bubbles
+  assistantBubble: '#FFFFFF', // White for assistant messages
+  text: '#1e3e1f', // Dark green text
+  lightText: '#5a6955', // Lighter green-gray text
+  
+  // Feature card backgrounds
+  featureCardBg1: '#FFE8D1',
+  featureCardBg2: '#D1F0FF',
+  featureCardBg3: '#FFD1E6',
+  featureCardBg4: '#D1FFE8',
+  featureCardBg5: '#E6D1FF',
 };
 
 export const SIZES = {
   // Global sizes
   base: 8,
   font: 14,
+  medium: 16,
+  large: 18,
+  xlarge: 24,
+  xxlarge: 32,
+  
+  // App-specific sizes
   radius: 12,
   padding: 24,
 
   // Font sizes
-  largeTitle: 100, // Pi logo size
-  h1: 32,
+  h1: 30,
   h2: 24,
   h3: 20,
   h4: 18,
   h5: 16,
-  body1: 24, 
-  body2: 20,
-  body3: 16,
-  body4: 14,
-  body5: 12,
+  body: 14,
+  small: 12,
 };
 
 export const FONTS = {
+  // Font families
+  primary: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
+  secondary: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
+  fallback: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif',
+  
+  // Font styles
   largeTitle: { 
-    fontFamily: 'System', 
-    fontSize: SIZES.largeTitle, 
-    lineHeight: 110,
-    fontWeight: '700' as const,
-    letterSpacing: -2,
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
+    fontSize: SIZES.xxlarge,
+    lineHeight: 55,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   h1: { 
-    fontFamily: 'System', 
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
     fontSize: SIZES.h1, 
-    lineHeight: 38, 
-    fontWeight: '700' as const,
-    letterSpacing: -0.5,
+    lineHeight: 36,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   h2: { 
-    fontFamily: 'System', 
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
     fontSize: SIZES.h2, 
     lineHeight: 30, 
-    fontWeight: '700' as const,
-    letterSpacing: -0.3,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   h3: { 
-    fontFamily: 'System', 
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
     fontSize: SIZES.h3, 
-    lineHeight: 24, 
-    fontWeight: '600' as const 
+    lineHeight: 26,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   h4: { 
-    fontFamily: 'System', 
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
     fontSize: SIZES.h4, 
     lineHeight: 22, 
-    fontWeight: '600' as const 
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   h5: { 
-    fontFamily: 'System', 
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
     fontSize: SIZES.h5, 
+    lineHeight: 20,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  body: {
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
+    fontSize: SIZES.body,
+    lineHeight: 20,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+  },
+  small: {
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
+    fontSize: SIZES.small,
+    lineHeight: 18,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+  },
+  button: {
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
+    fontSize: SIZES.body,
     lineHeight: 22, 
-    fontWeight: '600' as const 
-  },
-  body1: { 
-    fontFamily: 'System', 
-    fontSize: SIZES.body1, 
-    lineHeight: 36, 
-    fontWeight: '400' as const,
-    letterSpacing: -0.2,
-  },
-  body2: { 
-    fontFamily: 'System', 
-    fontSize: SIZES.body2, 
-    lineHeight: 30, 
-    fontWeight: '400' as const,
-    letterSpacing: -0.2,
-  },
-  body3: { 
-    fontFamily: 'System', 
-    fontSize: SIZES.body3, 
-    lineHeight: 22, 
-    fontWeight: '400' as const 
-  },
-  body4: { 
-    fontFamily: 'System', 
-    fontSize: SIZES.body4, 
-    lineHeight: 22, 
-    fontWeight: '400' as const 
-  },
-  body5: { 
-    fontFamily: 'System', 
-    fontSize: SIZES.body5, 
-    lineHeight: 22, 
-    fontWeight: '400' as const 
+    fontWeight: '600',
+    letterSpacing: 0.4,
   },
   italic: {
-    fontFamily: 'System',
-    fontSize: SIZES.h1,
-    lineHeight: 38,
-    fontWeight: '500' as const,
+    fontFamily: Platform.OS === 'ios' ? 'Noto Sans' : 'Noto Sans',
     fontStyle: 'italic',
-    letterSpacing: -0.5,
-  }
+  },
 };
 
 export const SHADOWS = {

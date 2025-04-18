@@ -19,12 +19,14 @@ import ProgressBar from '../components/ProgressBar';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MODEL_FILENAME, MODEL_REPO } from '../utils/modelUtils';
 import { useFocusEffect } from '@react-navigation/native';
+import { COLORS, FONTS } from '../constants/theme';
 
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
   Chat: { selectedModel: string };
   ModelSelection: undefined;
+  ChatList: { selectedModel: string };
 };
 
 type Props = {
@@ -214,7 +216,7 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
       // Check if already exists
       const fileExists = await RNFS.exists(destPath);
       if (fileExists) {
-        // Navigate directly if already downloaded
+        // Navigate directly to Chat if already downloaded
         navigation.navigate('Chat', { selectedModel: MODEL_FILENAME });
         return;
       }
@@ -237,8 +239,13 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
     }
   };
 
-  const startChat = () => {
-    navigation.navigate('Chat', { selectedModel: MODEL_FILENAME });
+  const handleModelSelection = () => {
+    if (isModelDownloaded) {
+      // Navigate directly to Chat
+      navigation.navigate('Chat', { selectedModel: MODEL_FILENAME });
+    } else {
+      Alert.alert('Model Not Downloaded', 'Please download the model first.');
+    }
   };
   
   // Calculate animation transforms
@@ -386,18 +393,21 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
           </View>
         ) : (
           isModelDownloaded ? (
-            <TouchableOpacity style={styles.chatButton} onPress={startChat}>
+            <TouchableOpacity style={styles.chatButton} onPress={handleModelSelection}>
               <View style={styles.downloadButtonContent}>
                 <Text style={styles.buttonText}>Let's Chat</Text>
-                <Text style={styles.downloadSize}>My brain is ready</Text>
+                <Text style={styles.downloadSize}>I'm ready to assist you</Text>
               </View>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.downloadButton} onPress={handleDownload}>
-              <View style={styles.downloadButtonContent}>
-                <Text style={styles.buttonText}>Download</Text>
-                <Text style={styles.downloadSize}>(1.3GB)</Text>
-              </View>
+            <TouchableOpacity
+              style={[styles.button, { opacity: isDownloading ? 0.5 : 1 }]}
+              onPress={handleDownload}
+              disabled={isDownloading}
+            >
+              <Text style={styles.buttonText}>
+                {isDownloading ? 'Downloading...' : "I'm ready to assist you"}
+              </Text>
             </TouchableOpacity>
           )
         )}
@@ -530,21 +540,31 @@ const styles = StyleSheet.create({
     fontSize: Math.min(14, width * 0.035),
     marginBottom: height * 0.02,
   },
+  button: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'sans-serif-medium',
+  },
   downloadButton: {
     backgroundColor: '#e14f29',
-    paddingVertical: height * 0.02,
-    paddingHorizontal: width * 0.08,
-    borderRadius: 50,
-    width: Math.min(300, width * 0.7),
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  chatButton: {
-    backgroundColor: '#2e8b57', // Sea green color for "Let's Chat" button
     paddingVertical: height * 0.02,
     paddingHorizontal: width * 0.08,
     borderRadius: 50,
@@ -559,16 +579,24 @@ const styles = StyleSheet.create({
   downloadButtonContent: {
     alignItems: 'center',
   },
-  buttonText: {
-    color: 'white',
-    fontSize: Math.min(18, width * 0.045),
-    fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif',
+  chatButton: {
+    backgroundColor: '#e14f29',
+    paddingVertical: height * 0.02,
+    paddingHorizontal: width * 0.08,
+    borderRadius: 50,
+    width: Math.min(300, width * 0.7),
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   downloadSize: {
     color: 'rgba(255, 255, 255, 0.9)',
     fontSize: Math.min(14, width * 0.035),
     marginTop: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif',
   },
   downloadingContainer: {
     width: Math.min(350, width * 0.85),
