@@ -331,10 +331,4 @@ export const formatPrompt = (messages: Message[], selectedTemplateId: string): M
   }
   
   return formattedMessages;
-};
-
-export const unsafeResponseMessage = {
-  role: 'assistant' as const,
-  content: 'I apologize, but I cannot provide assistance with that request as it appears to potentially violate safety guidelines. I\'m designed to be helpful, harmless, and honest in my interactions. Please feel free to ask me about something else I can help you with.',
-  thought: 'This request was flagged by my safety systems as potentially harmful or inappropriate. I need to decline this request and encourage the user to engage with more constructive topics.'
 }; 
