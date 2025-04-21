@@ -15,6 +15,7 @@ import {
   Animated,
   Pressable,
   StatusBar,
+  Image,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { initLlama, releaseAllLlama } from 'llama.rn';
@@ -876,6 +877,32 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   };
 
+  // Helper function to get the image source based on the icon path
+  const getImageSource = (iconPath: string | undefined) => {
+    if (!iconPath) return require('../../assets/understand.png');
+    
+    // Map icon paths to require statements
+    const iconMap: {[key: string]: any} = {
+      'understand.png': require('../../assets/understand.png'),
+      'analyse.png': require('../../assets/analyse.png'),
+      'write.png': require('../../assets/write.png'),
+      'modelselection.png': require('../../assets/modelselection.png'),
+      'justtalkorvent.png': require('../../assets/justtalkorvent.png'),
+      'ideas.png': require('../../assets/ideas.png'),
+      'custom2.png': require('../../assets/custom2.png'),
+      'custom3.png': require('../../assets/custom3.png'),
+      'custom5.png': require('../../assets/custom5.png'),
+      'custom6.png': require('../../assets/custom6.png'),
+      'custom7.png': require('../../assets/custom7.png'),
+      'custom8.png': require('../../assets/custom8.png'),
+      'custom9.png': require('../../assets/custom9.png'),
+      'custom10.png': require('../../assets/custom10.png'),
+      'custom11.png': require('../../assets/custom11.png'),
+    };
+    
+    return iconMap[iconPath] || require('../../assets/understand.png');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -914,8 +941,14 @@ const ChatScreen = ({ route, navigation }: Props) => {
               style={styles.personaButton}
               onPress={() => setPersonaSelectorVisible(true)}
             >
+              <View style={styles.personaIconContainer}>
+                <Image 
+                  source={getImageSource(selectedPersona.iconPath)}
+                  style={styles.personaIcon}
+                />
+              </View>
               <Text style={styles.personaButtonText}>
-                {selectedPersona.icon} {selectedPersona.name}
+                {selectedPersona.name}
               </Text>
             </TouchableOpacity>
           </View>
@@ -948,9 +981,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
         >
           <View style={styles.chatWrapper}>
             <View style={styles.chatContainer}>
-              <Text style={styles.greetingText}>
-                {selectedPersona.icon} Welcome! {selectedPersona.name} is ready to help. Ask away! 🎉
-              </Text>
+              <View style={styles.welcomeContainer}>
+                <Image 
+                  source={getImageSource(selectedPersona.iconPath)}
+                  style={styles.welcomeIcon}
+                />
+                <Text style={styles.greetingText}>
+                  Welcome! {selectedPersona.name} is ready to help. Ask away! 🎉
+                </Text>
+              </View>
               {conversation.slice(1).map((msg, index) => (
                 <View key={index} style={styles.messageWrapper}>
                   {msg.role === 'user' ? (
@@ -971,6 +1010,12 @@ const ChatScreen = ({ route, navigation }: Props) => {
                     </View>
                   ) : (
                     <View style={styles.assistantMessageContainer}>
+                      <View style={styles.assistantHeader}>
+                        <Image 
+                          source={getImageSource(selectedPersona.iconPath)}
+                          style={styles.assistantIcon}
+                        />
+                      </View>
                       <Text style={styles.assistantMessageText}>
                         <Markdown>{msg.content}</Markdown>
                       </Text>
@@ -1076,12 +1121,14 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Math.min(16, width * 0.04),
+    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: COLORS.background,
     height: Platform.OS === 'ios' ? 50 : 56,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1100,25 +1147,25 @@ const styles = StyleSheet.create({
     flex: 0.2,
   },
   menuButton: {
-    width: 40,
-    height: 40,
+    width: Math.min(40, width * 0.1),
+    height: Math.min(40, width * 0.1),
     justifyContent: 'center',
     alignItems: 'center',
   },
   menuButtonIcon: {
-    width: 24,
-    height: 18,
+    width: Math.min(24, width * 0.06),
+    height: Math.min(18, width * 0.045),
     justifyContent: 'space-between',
   },
   menuLine: {
-    width: 24,
+    width: Math.min(24, width * 0.06),
     height: 2,
     backgroundColor: COLORS.text,
     borderRadius: 1,
   },
   personaButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     backgroundColor: 'rgba(225, 79, 41, 0.05)',
     borderRadius: 16,
     flexDirection: 'row',
@@ -1126,15 +1173,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   personaButtonText: {
-    fontSize: Math.min(15, width * 0.04),
+    fontSize: Math.min(14, width * 0.035),
     fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
   clearChatButton: {
     backgroundColor: '#F5A623',
-    width: 36,
-    height: 36,
+    width: Math.min(36, width * 0.09),
+    height: Math.min(36, width * 0.09),
     shadowOpacity: 0.25,
     borderBottomWidth: 2,
     borderRightWidth: 1,
@@ -1142,8 +1189,8 @@ const styles = StyleSheet.create({
     borderRightColor: 'rgba(0, 0, 0, 0.2)',
   },
   iconContainer: {
-    width: 20,
-    height: 20,
+    width: Math.min(20, width * 0.05),
+    height: Math.min(20, width * 0.05),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1171,7 +1218,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    marginBottom: 70,
+    marginBottom: Platform.OS === 'ios' ? 70 : 65,
   },
   scrollViewContent: {
     flexGrow: 1,
@@ -1179,26 +1226,26 @@ const styles = StyleSheet.create({
   },
   chatWrapper: {
     flex: 1,
-    padding: 12,
+    padding: Math.min(12, width * 0.03),
   },
   chatContainer: {
     flex: 1,
-    padding: 12,
+    padding: Math.min(12, width * 0.03),
     marginBottom: 8,
   },
   greetingText: {
-    fontSize: 16,
+    fontSize: Math.min(15, width * 0.038),
     fontWeight: '500',
     textAlign: 'center',
-    marginVertical: 20,
     color: COLORS.lightText,
     fontFamily: FONTS.primary,
+    lineHeight: Math.min(22, width * 0.055),
   },
   messageWrapper: {
-    marginBottom: 16,
+    marginBottom: Math.min(16, width * 0.04),
   },
   messageBubble: {
-    padding: Math.max(10, width * 0.022),
+    padding: Math.max(8, width * 0.02),
     borderRadius: 16,
     maxWidth: '85%',
     shadowColor: '#000',
@@ -1212,9 +1259,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.userBubble,
   },
   messageText: {
-    fontSize: Math.min(17, width * 0.045),
+    fontSize: Math.min(15, width * 0.04),
     color: COLORS.text,
-    lineHeight: Math.min(25, width * 0.06),
+    lineHeight: Math.min(22, width * 0.055),
     fontFamily: FONTS.primary,
   },
   userMessageText: {
@@ -1222,19 +1269,19 @@ const styles = StyleSheet.create({
   },
   assistantMessageContainer: {
     alignSelf: 'flex-start',
-    maxWidth: '90%',
+    maxWidth: width > 500 ? '80%' : '90%',
     marginBottom: 8,
   },
   assistantMessageText: {
-    fontSize: Math.min(18, width * 0.046),
+    fontSize: Math.min(16, width * 0.042),
     color: COLORS.text,
-    lineHeight: Math.min(27, width * 0.065),
-    marginBottom: 8,
+    lineHeight: Math.min(24, width * 0.06),
+    marginBottom: 6,
     fontFamily: FONTS.primary,
   },
   thoughtContainer: {
-    marginTop: 8,
-    padding: 10,
+    marginTop: 6,
+    padding: 8,
     backgroundColor: 'rgba(225, 79, 41, 0.05)',
     borderRadius: 8,
     borderLeftWidth: 3,
@@ -1242,25 +1289,25 @@ const styles = StyleSheet.create({
   },
   thoughtTitle: {
     color: COLORS.lightText,
-    fontSize: 13,
+    fontSize: Math.min(12, width * 0.03),
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
     fontFamily: FONTS.secondary,
   },
   thoughtText: {
     color: COLORS.lightText,
-    fontSize: 13,
+    fontSize: Math.min(12, width * 0.03),
     fontStyle: 'italic',
-    lineHeight: 18,
+    lineHeight: Math.min(16, width * 0.04),
     fontFamily: FONTS.secondary,
   },
   toggleButton: {
-    marginTop: 8,
-    paddingVertical: 4,
+    marginTop: 6,
+    paddingVertical: 3,
   },
   toggleText: {
     color: COLORS.primary,
-    fontSize: 13,
+    fontSize: Math.min(12, width * 0.03),
     fontWeight: '500',
     fontFamily: FONTS.secondary,
   },
@@ -1278,14 +1325,16 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 10,
-    paddingTop: 10,
+    paddingHorizontal: Math.min(12, width * 0.03),
+    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+    paddingTop: 8,
     backgroundColor: COLORS.background,
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.05)',
   },
   input: {
     flex: 1,
@@ -1293,10 +1342,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     maxHeight: 80,
     minHeight: 40,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: Platform.OS === 'ios' ? 10 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
     paddingHorizontal: 14,
-    fontSize: Math.min(15, width * 0.04),
+    fontSize: Math.min(15, width * 0.038),
     color: COLORS.text,
     marginRight: 8,
     fontFamily: FONTS.primary,
@@ -1313,8 +1362,8 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     backgroundColor: COLORS.primary,
-    width: 40,
-    height: 40,
+    width: Math.min(40, width * 0.1),
+    height: Math.min(40, width * 0.1),
     shadowOpacity: 0.25,
     borderBottomWidth: 2,
     borderRightWidth: 1,
@@ -1325,8 +1374,8 @@ const styles = StyleSheet.create({
   },
   stopButton: {
     backgroundColor: '#FF3B30',
-    width: 40,
-    height: 40,
+    width: Math.min(40, width * 0.1),
+    height: Math.min(40, width * 0.1),
     shadowOpacity: 0.3,
     shadowColor: '#FF3B30',
     borderBottomWidth: 2,
@@ -1342,7 +1391,7 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: Math.min(15, width * 0.038),
     fontWeight: '600',
     textAlign: 'center',
     fontFamily: FONTS.primary,
@@ -1358,6 +1407,44 @@ const styles = StyleSheet.create({
     },
     shadowRadius: 4,
     elevation: 4,
+  },
+  personaIconContainer: {
+    width: Math.min(20, width * 0.05),
+    height: Math.min(20, width * 0.05),
+    marginRight: 6,
+    borderRadius: Math.min(10, width * 0.025),
+    overflow: 'hidden',
+  },
+  personaIcon: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  welcomeContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+    paddingHorizontal: width * 0.05,
+    width: '100%',
+  },
+  welcomeIcon: {
+    width: Math.min(28, width * 0.07),
+    height: Math.min(28, width * 0.07),
+    marginBottom: 10,
+    resizeMode: 'contain',
+  },
+  assistantHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  assistantIcon: {
+    width: Math.min(20, width * 0.05),
+    height: Math.min(20, width * 0.05),
+    marginRight: 6,
+    borderRadius: Math.min(10, width * 0.025),
+    resizeMode: 'contain',
   },
 });
 

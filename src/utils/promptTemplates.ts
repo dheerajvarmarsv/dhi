@@ -6,8 +6,25 @@ export type PromptTemplate = {
   name: string;
   description: string;
   systemPrompt: string;
-  icon?: string;
+  iconPath?: string;
   isCustom?: boolean;
+};
+
+// Helper function to get a random custom icon path
+export const getRandomCustomIconPath = (): string => {
+  const customIcons = [
+    'custom2.png',
+    'custom3.png',
+    'custom5.png',
+    'custom6.png',
+    'custom7.png',
+    'custom8.png',
+    'custom9.png',
+    'custom10.png',
+    'custom11.png',
+  ];
+  const randomIndex = Math.floor(Math.random() * customIcons.length);
+  return customIcons[randomIndex];
 };
 
 export const promptTemplates: PromptTemplate[] = [
@@ -64,7 +81,7 @@ You are a conversational AI called DHI focused on engaging in authentic dialogue
 Remember: Focus on genuine engagement rather than artificial markers of casual speech. The goal is authentic dialogue, not performative informality.
 
 Approach each interaction as a genuine conversation rather than a task to complete.`,
-    icon: '🤖'
+    iconPath: 'understand.png'
   },
   {
     id: 'compass',
@@ -104,7 +121,7 @@ Approach each interaction as a genuine conversation rather than a task to comple
 • Use open‑ended language to keep the conversation flowing.  
 • Tailor each strategy and question to the user's unique context.  
 • Never skip steps—this structure ensures genuine empathy and actionable support.`,
-    icon: '🧭'
+    iconPath: 'justtalkorvent.png'
   },
   {
     id: 'fitness',
@@ -144,7 +161,7 @@ Approach each interaction as a genuine conversation rather than a task to comple
    - **Conversation Structure:** Start with user goals, build plans in phases, close with next‑step check‑in  
 
 > **Always introduce yourself as "DHI"** and focus on helping the user achieve their **complete physical and mental health reboot** as a **Combined Fitness Coach, Certified Nutritionist & Motivational Partner**.`,
-    icon: '💪'
+    iconPath: 'modelselection.png'
   },
   {
     id: 'financial',
@@ -184,7 +201,7 @@ Approach each interaction as a genuine conversation rather than a task to comple
    - **Conversation Structure:** Start with user's big-picture goals, collect key data, deliver an overview, then drill into specifics and follow‑up cadence  
 
 > **Always introduce yourself as "DHI"** and focus on guiding the user through their **holistic personal finance journey**—from budgeting basics to long‑term planning—as their **World‑Class Certified Financial Advisor & Behavioral Money Coach**.`,
-    icon: '💰'
+    iconPath: 'analyse.png'
   },
   {
     id: 'creative',
@@ -228,7 +245,7 @@ Approach each interaction as a genuine conversation rather than a task to comple
      4. Offer an optional continuation or writing prompt  
 
 > **Always introduce yourself as "DHI"** and focus on helping the user achieve their **creative storytelling or poetic expression goals** as a **Master Storyteller, Literary Poet & Narrative Designer**.`,
-    icon: '✍️'
+    iconPath: 'write.png'
   },
   {
     id: 'coding',
@@ -273,7 +290,7 @@ Approach each interaction as a genuine conversation rather than a task to comple
      5. Confirm understanding and plan follow‑up  
 
 > **Always introduce yourself as "DHI"** and focus on helping the user achieve their **goal of mastering code quality and problem‑solving** as a **Senior Software Engineer & Pair Programming Mentor**.`,
-    icon: '💻'
+    iconPath: 'ideas.png'
   }
 ];
 
@@ -284,7 +301,8 @@ export const getAllPersonas = async (): Promise<PromptTemplate[]> => {
     const customPersonasData = await getCustomPersonas();
     const customPersonas = customPersonasData.personas.map(persona => ({
       ...persona,
-      isCustom: true
+      isCustom: true,
+      iconPath: getRandomCustomIconPath() // Assign a random icon to custom personas
     }));
     
     // Combine built-in and custom personas
@@ -313,4 +331,10 @@ export const formatPrompt = (messages: Message[], selectedTemplateId: string): M
   }
   
   return formattedMessages;
+};
+
+export const unsafeResponseMessage = {
+  role: 'assistant' as const,
+  content: 'I apologize, but I cannot provide assistance with that request as it appears to potentially violate safety guidelines. I\'m designed to be helpful, harmless, and honest in my interactions. Please feel free to ask me about something else I can help you with.',
+  thought: 'This request was flagged by my safety systems as potentially harmful or inappropriate. I need to decline this request and encourage the user to engage with more constructive topics.'
 }; 

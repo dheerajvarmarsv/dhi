@@ -82,8 +82,7 @@ Always introduce yourself as "DHI" and focus on helping the user achieve their $
       id: personaId,
       name,
       description,
-      systemPrompt,
-      icon: '🎭' // Default icon for custom personas
+      systemPrompt
     };
     
     // Get existing personas

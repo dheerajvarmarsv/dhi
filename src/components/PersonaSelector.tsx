@@ -17,6 +17,7 @@ import {
 import { promptTemplates, PromptTemplate, getAllPersonas } from '../utils/promptTemplates';
 import { deleteCustomPersona } from '../utils/customPersonaStorage';
 import CreatePersonaButton from './CreatePersonaButton';
+import RNFS from 'react-native-fs';
 
 const { height } = Dimensions.get('window');
 
@@ -100,6 +101,32 @@ const PersonaSelector = ({
     );
   };
   
+  // Add a helper function to get the image source based on the icon path
+  const getImageSource = (iconPath: string | undefined) => {
+    if (!iconPath) return require('../../assets/understand.png');
+    
+    // Map icon paths to require statements
+    const iconMap: {[key: string]: any} = {
+      'understand.png': require('../../assets/understand.png'),
+      'analyse.png': require('../../assets/analyse.png'),
+      'write.png': require('../../assets/write.png'),
+      'modelselection.png': require('../../assets/modelselection.png'),
+      'justtalkorvent.png': require('../../assets/justtalkorvent.png'),
+      'ideas.png': require('../../assets/ideas.png'),
+      'custom2.png': require('../../assets/custom2.png'),
+      'custom3.png': require('../../assets/custom3.png'),
+      'custom5.png': require('../../assets/custom5.png'),
+      'custom6.png': require('../../assets/custom6.png'),
+      'custom7.png': require('../../assets/custom7.png'),
+      'custom8.png': require('../../assets/custom8.png'),
+      'custom9.png': require('../../assets/custom9.png'),
+      'custom10.png': require('../../assets/custom10.png'),
+      'custom11.png': require('../../assets/custom11.png'),
+    };
+    
+    return iconMap[iconPath] || require('../../assets/understand.png');
+  };
+  
   return (
     <Modal
       visible={visible}
@@ -150,7 +177,14 @@ const PersonaSelector = ({
                         activeOpacity={0.7}
                       >
                         <View style={styles.personaIconContainer}>
-                          <Text style={styles.personaIcon}>{persona.icon}</Text>
+                          {persona.iconPath ? (
+                            <Image 
+                              source={getImageSource(persona.iconPath)}
+                              style={styles.personaIconImage}
+                            />
+                          ) : (
+                            <Text style={styles.personaIcon}>?</Text>
+                          )}
                         </View>
                         <View style={styles.personaInfo}>
                           <Text style={styles.personaName}>{persona.name}</Text>
@@ -184,7 +218,14 @@ const PersonaSelector = ({
                               activeOpacity={0.7}
                             >
                               <View style={[styles.personaIconContainer, styles.customPersonaIconContainer]}>
-                                <Text style={styles.personaIcon}>{persona.icon}</Text>
+                                {persona.iconPath ? (
+                                  <Image 
+                                    source={getImageSource(persona.iconPath)}
+                                    style={styles.personaIconImage}
+                                  />
+                                ) : (
+                                  <Text style={styles.personaIcon}>?</Text>
+                                )}
                               </View>
                               <View style={styles.personaInfo}>
                                 <Text style={styles.personaName}>{persona.name}</Text>
@@ -226,7 +267,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: height * 0.9,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
   },
   headerBar: {
     width: 40,
@@ -246,7 +287,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: Math.min(18, Dimensions.get('window').width * 0.045),
     fontWeight: '600',
     color: '#000',
   },
@@ -254,13 +295,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     top: 14,
-    width: 30,
-    height: 30,
+    width: 26,
+    height: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeButtonText: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '400',
     color: '#666',
   },
@@ -278,15 +319,16 @@ const styles = StyleSheet.create({
     maxHeight: height * 0.7,
   },
   personaListContent: {
-    padding: 16,
+    padding: Math.min(16, Dimensions.get('window').width * 0.04),
     paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 30,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: Math.min(14, Dimensions.get('window').width * 0.035),
     fontWeight: '600',
     color: '#666',
     marginTop: 8,
-    marginBottom: 12,
+    marginBottom: 10,
     paddingHorizontal: 4,
   },
   customSectionTitle: {
@@ -294,15 +336,15 @@ const styles = StyleSheet.create({
   },
   personaItem: {
     flexDirection: 'row',
-    padding: 16,
+    padding: Platform.OS === 'ios' ? 14 : 12,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     backgroundColor: '#f8f8f8',
     alignItems: 'center',
   },
   customPersonaItemContainer: {
     position: 'relative',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   customPersonaItem: {
     backgroundColor: '#f0f7ff',
@@ -315,18 +357,19 @@ const styles = StyleSheet.create({
     borderColor: '#3498db',
   },
   personaIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: Math.min(48, Dimensions.get('window').width * 0.12),
+    height: Math.min(48, Dimensions.get('window').width * 0.12),
+    borderRadius: Math.min(24, Dimensions.get('window').width * 0.06),
     backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    overflow: 'hidden',
   },
   customPersonaIconContainer: {
     backgroundColor: 'rgba(52, 152, 219, 0.1)',
@@ -338,23 +381,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   personaName: {
-    fontSize: 16,
+    fontSize: Math.min(16, Dimensions.get('window').width * 0.04),
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
     color: '#000',
+    letterSpacing: 0.1,
   },
   personaDescription: {
-    fontSize: 14,
+    fontSize: Math.min(14, Dimensions.get('window').width * 0.035),
     color: '#666',
-    lineHeight: 20,
+    lineHeight: Math.min(20, Dimensions.get('window').width * 0.045),
   },
   deleteButton: {
     position: 'absolute',
-    top: -10,
-    right: -10,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#FF3B30',
     alignItems: 'center',
     justifyContent: 'center',
@@ -367,13 +411,18 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   deleteButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: 'white',
     textAlign: 'center',
     lineHeight: 20,
     includeFontPadding: false,
     marginTop: -1,
+  },
+  personaIconImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
   },
 });
 
