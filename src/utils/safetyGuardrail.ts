@@ -1,6 +1,7 @@
 // src/utils/safetyGuardrail.ts
 
 import { Message } from '../types';
+import { unsafeResponseMessage } from './promptTemplates';
 
 // The safety guardrail prompt - this evaluates if a user message is safe
 export const SAFETY_GUARDRAIL_PROMPT = `# CRITICAL SAFETY RULES - ABSOLUTE HIGHEST PRIORITY
@@ -70,23 +71,28 @@ If the answer is NO, provide NO FURTHER EXPLANATION OR DETAILS.
 
 YOUR ANSWER (ONLY 'YES' OR 'NO'): `;
 
-// Response when a message is deemed unsafe
-export const UNSAFE_RESPONSE = `I'm sorry, but I can't assist with that request. It appears to violate our safety guidelines. 
-
-If you have other questions or need help with something else, I'm happy to assist.`;
-
-// Function to check if a message is safe
-// Returns a Promise that resolves to boolean (true = safe, false = unsafe)
-export async function evaluateMessageSafety(
-  context: any, 
+/**
+ * Primary safety check to evaluate if a message is potentially unsafe
+ * Uses the LLM itself with a comprehensive safety guardrail prompt
+ * 
+ * @param context - The LLM context
+ * @param userMessage - The user message to evaluate
+ * @returns Promise<boolean> - True if the message is safe, false if it might be unsafe
+ */
+export const evaluateMessageSafety = async (
+  context: any,
   userMessage: string
-): Promise<boolean> {
+): Promise<boolean> => {
   try {
+    console.log('🛡️ [SAFETY] Starting safety evaluation for message:', 
+                userMessage.length > 30 ? `${userMessage.substring(0, 30)}...` : userMessage);
+    
     // Skip safety check for empty or very short messages (likely greetings)
     if (!userMessage.trim() || userMessage.trim().length < 5) {
+      console.log('🛡️ [SAFETY] Message too short, skipping safety check');
       return true;
     }
-
+    
     // Replace placeholder with actual user message
     const safetyPrompt = SAFETY_GUARDRAIL_PROMPT.replace('{{USER_MESSAGE}}', userMessage);
     
@@ -98,23 +104,39 @@ export async function evaluateMessageSafety(
       }
     ];
     
-    // Call the LLM to evaluate safety
-    const result = await context.completion({
-      messages: messages,
-      temperature: 0, // Use 0 temperature for deterministic output
-      max_tokens: 10, // We only need a short response
-      stop: ["\n"] // Stop at newline
-    });
+    console.log('🛡️ [SAFETY] Sending message to LLM for safety evaluation');
+    
+    // Call the LLM to evaluate safety - match the API used in ChatScreen.tsx
+    const result = await context.completion(
+      {
+        messages: messages,
+        temperature: 0, // Use 0 temperature for deterministic output
+        n_predict: 10, // We only need a short response
+        stop: ["\n"] // Stop at newline
+      }
+    );
+    
+    // Extract content from the result - handle both possible response formats
+    const responseText = typeof result.content === 'string' 
+      ? result.content 
+      : (result.text || '');
+    
+    console.log('🛡️ [SAFETY] Received safety evaluation result:', responseText);
     
     // Check if the result includes "YES" (indicating safe)
-    const isMessageSafe = result && result.text && 
-                          result.text.trim().toUpperCase().includes('YES');
+    const isMessageSafe = responseText.trim().toUpperCase().includes('YES');
+    
+    console.log('🛡️ [SAFETY] Message evaluation result:', isMessageSafe ? 'SAFE ✅' : 'UNSAFE ❌');
     
     return isMessageSafe;
+    
   } catch (error) {
-    console.error('Error evaluating message safety:', error);
+    console.error('🛡️ [SAFETY] Error evaluating message safety:', error);
     // Default to allowing the message if there's an error in the safety check
     // This prevents the safety system from blocking legitimate messages
     return true;
   }
-}
+};
+
+// Export the unsafe response from promptTemplates
+export const UNSAFE_RESPONSE = unsafeResponseMessage.content;

@@ -296,20 +296,63 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
   const handleSendMessage = async () => {
     if (!context) {
+      console.log('🔴 [CHAT] Error: Model not loaded');
       Alert.alert('Model Not Loaded', 'Please wait for the model to load.');
       return;
     }
+    
     if (!userInput.trim()) {
+      console.log('🔴 [CHAT] Error: Empty input');
       return;
     }
+    
+    console.log('🟢 [CHAT] Starting message flow for user input:', 
+                userInput.length > 30 ? `${userInput.substring(0, 30)}...` : userInput);
 
     // Ensure we have a valid chat ID before sending a message
     if (!currentChatId) {
+      console.log('🟡 [CHAT] No current chat ID, creating new chat');
       await createNewChat();
       if (!currentChatId) {
+        console.log('🔴 [CHAT] Failed to create new chat');
         Alert.alert('Error', 'Could not create a chat. Please try again.');
         return;
       }
+    }
+    
+    // First, check if the message is safe
+    try {
+      console.log('🟡 [CHAT] Checking message safety');
+      // Import and use the safety evaluation function
+      const { evaluateMessageSafety, UNSAFE_RESPONSE } = require('../utils/safetyGuardrail');
+      
+      const isMessageSafe = await evaluateMessageSafety(context, userInput);
+      console.log('🟡 [CHAT] Safety check result:', isMessageSafe ? 'SAFE' : 'UNSAFE');
+      
+      if (!isMessageSafe) {
+        console.log('🔴 [CHAT] Message failed safety check, responding with safety message');
+        // Add user message to conversation
+        const newUserMessage: Message = { role: 'user', content: userInput };
+        setConversation([...conversation, newUserMessage]);
+        setUserInput('');
+        
+        // Add unsafe response
+        setTimeout(() => {
+          setConversation(prev => [
+            ...prev,
+            { role: 'assistant', content: UNSAFE_RESPONSE }
+          ]);
+        }, 500);
+        
+        // Save chat after completion
+        await saveChat();
+        return;
+      }
+      
+      console.log('🟢 [CHAT] Message passed safety check, proceeding with normal flow');
+    } catch (error) {
+      console.error('🔴 [CHAT] Error during safety check:', error);
+      // Continue with normal flow if safety check fails
     }
 
     const newUserMessage: Message = { role: 'user', content: userInput };
@@ -318,12 +361,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
     setUserInput('');
     setIsGenerating(true);
     setAutoScrollEnabled(true);
+    
+    console.log('🟢 [CHAT] Added user message to conversation, starting generation');
 
     try {
       // If this is the first user message and the chat title is "New Chat",
       // automatically rename it using the first 20 characters
       if (chatTitle === 'New Chat' && conversation.length === 1) {
         const newTitle = userInput.trim().slice(0, 20);
+        console.log('🟡 [CHAT] Updating chat title to:', newTitle);
         setChatTitle(newTitle);
         if (currentChatId) {
           await updateChatSession(currentChatId, {
@@ -342,6 +388,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       ];
       
       // Format with the selected persona's prompt template
+      console.log('🟡 [CHAT] Formatting messages with persona:', selectedPersonaId);
       const formattedMessages = formatPrompt([...updatedConversation], selectedPersonaId);
 
       // Append a placeholder for the assistant's response
@@ -359,6 +406,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
       let currentThought = '';
       let inThinkBlock = false;
       let inEmpathyChain = false;
+      
+      console.log('🟡 [CHAT] Starting LLM completion');
       
       interface CompletionData {
         token: string;
@@ -385,10 +434,12 @@ const ChatScreen = ({ route, navigation }: Props) => {
             if (token.includes('<empathy_chain>')) {
               inEmpathyChain = true;
               currentThought = token.replace('<empathy_chain>', '');
+              console.log('🟡 [CHAT] Entering empathy_chain block');
               return; // Skip adding this to visible content
             } else if (token.includes('</empathy_chain>')) {
               inEmpathyChain = false;
               const finalThought = currentThought.replace('</empathy_chain>', '').trim();
+              console.log('🟡 [CHAT] Exiting empathy_chain block, thought length:', finalThought.length);
               
               setConversation((prev) => {
                 const lastIndex = prev.length - 1;
@@ -406,9 +457,11 @@ const ChatScreen = ({ route, navigation }: Props) => {
               currentThought += token;
               return; // Skip adding this to visible content
             } else if (token.includes('<assistant_response>')) {
+              console.log('🟡 [CHAT] Entering assistant_response block');
               // Skip the tag but continue processing content inside
               return;
             } else if (token.includes('</assistant_response>')) {
+              console.log('🟡 [CHAT] Exiting assistant_response block');
               // Skip the closing tag
               return;
             }
@@ -417,10 +470,12 @@ const ChatScreen = ({ route, navigation }: Props) => {
             if (token.includes('<think>')) {
               inThinkBlock = true;
               currentThought = token.replace('<think>', '');
+              console.log('🟡 [CHAT] Entering think block');
               return; // Skip adding this to visible content
             } else if (token.includes('</think>')) {
               inThinkBlock = false;
               const finalThought = currentThought.replace('</think>', '').trim();
+              console.log('🟡 [CHAT] Exiting think block, thought length:', finalThought.length);
 
               setConversation((prev) => {
                 const lastIndex = prev.length - 1;
@@ -471,14 +526,20 @@ const ChatScreen = ({ route, navigation }: Props) => {
         }
       );
       
+      console.log('🟢 [CHAT] LLM completion finished, generation speed:', 
+                  result.timings.predicted_per_second.toFixed(2), 'tokens/second');
+      
       // Save chat after completion
       await saveChat();
+      console.log('🟢 [CHAT] Chat saved successfully');
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('🔴 [CHAT] Error during inference:', errorMessage);
       Alert.alert('Error During Inference', errorMessage);
     } finally {
       setIsGenerating(false);
+      console.log('🟢 [CHAT] Message handling completed');
     }
   };
 
