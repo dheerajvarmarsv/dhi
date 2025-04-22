@@ -34,6 +34,9 @@ import PersonaSelector from '../components/PersonaSelector';
 import ChatSidebar from '../components/ChatSidebar';
 import { Message, ChatSession } from '../types';
 import { COLORS, FONTS } from '../constants/theme';
+import { ensureVoicePermissions } from '../utils/permissions';
+import Voice from '@react-native-community/voice';
+import { AudioWaveform } from '../components/AudioWaveform';
 
 // Get device dimensions for responsive design
 const { width, height } = Dimensions.get('window');
@@ -68,6 +71,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const [personaSelectorVisible, setPersonaSelectorVisible] = useState<boolean>(false);
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingAmplitude, setRecordingAmplitude] = useState(0);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollPositionRef = useRef(0);
@@ -903,6 +908,45 @@ const ChatScreen = ({ route, navigation }: Props) => {
     return iconMap[iconPath] || require('../../assets/understand.png');
   };
 
+  // Initialize voice recognition
+  useEffect(() => {
+    Voice.onSpeechStart = () => setIsRecording(true);
+    Voice.onSpeechEnd = () => setIsRecording(false);
+    Voice.onSpeechResults = (e: any) => {
+      if (e.value && e.value[0]) {
+        setUserInput(e.value[0]);
+      }
+    };
+    Voice.onSpeechVolumeChanged = (e: any) => {
+      setRecordingAmplitude(e.value / 10); // Normalize amplitude to 0-1 range
+    };
+
+    return () => {
+      Voice.destroy().then(Voice.removeAllListeners);
+    };
+  }, []);
+
+  const startRecording = async () => {
+    const hasPermission = await ensureVoicePermissions();
+    if (!hasPermission) return;
+
+    try {
+      await Voice.start('en-US', {
+        EXTRA_PREFER_OFFLINE: true // Android flag for offline recognition
+      });
+    } catch (error) {
+      console.error('Error starting voice recording:', error);
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      await Voice.stop();
+    } catch (error) {
+      console.error('Error stopping voice recording:', error);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -1075,11 +1119,20 @@ const ChatScreen = ({ route, navigation }: Props) => {
             returnKeyType="default"
             autoCapitalize="none"
             autoCorrect={false}
-            editable={!isGenerating}
+            editable={!isGenerating && !isRecording}
             placeholderTextColor="#999"
             textAlignVertical="top"
             numberOfLines={3}
           />
+          {isRecording && (
+            <View style={styles.waveformContainer}>
+              <AudioWaveform
+                isRecording={isRecording}
+                amplitude={recordingAmplitude}
+                color={COLORS.primary}
+              />
+            </View>
+          )}
           {isGenerating ? (
             <ButtonWithAnimation
               onPress={stopGeneration}
@@ -1089,17 +1142,39 @@ const ChatScreen = ({ route, navigation }: Props) => {
             >
               Stop
             </ButtonWithAnimation>
-          ) : (
+          ) : isRecording ? (
             <ButtonWithAnimation
-              onPress={handleSendMessage}
-              style={[
-                styles.sendButton,
-                !userInput.trim() || !context ? styles.sendButtonDisabled : {}
-              ]}
+              onPress={stopRecording}
+              isStop={true}
+              style={styles.stopButton}
               textStyle={{}}
             >
-              Send
+              Stop
             </ButtonWithAnimation>
+          ) : (
+            <View style={styles.buttonRow}>
+              <ButtonWithAnimation
+                onPress={startRecording}
+                style={styles.micButton}
+                isIcon={true}
+              >
+                <Image 
+                  source={require('../../assets/justtalkorvent.png')}
+                  style={styles.micIcon}
+                  resizeMode="contain"
+                />
+              </ButtonWithAnimation>
+              <ButtonWithAnimation
+                onPress={handleSendMessage}
+                style={[
+                  styles.sendButton,
+                  !userInput.trim() || !context ? styles.sendButtonDisabled : {}
+                ]}
+                textStyle={{}}
+              >
+                Send
+              </ButtonWithAnimation>
+            </View>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -1445,6 +1520,33 @@ const styles = StyleSheet.create({
     marginRight: 6,
     borderRadius: Math.min(10, width * 0.025),
     resizeMode: 'contain',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  micButton: {
+    backgroundColor: COLORS.primary,
+    width: Math.min(40, width * 0.1),
+    height: Math.min(40, width * 0.1),
+    shadowOpacity: 0.25,
+    borderBottomWidth: 2,
+    borderRightWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
+    borderRightColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  micIcon: {
+    width: Math.min(20, width * 0.05),
+    height: Math.min(20, width * 0.05),
+    tintColor: '#FFFFFF',
+  },
+  waveformContainer: {
+    position: 'absolute',
+    top: -40,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
 });
 

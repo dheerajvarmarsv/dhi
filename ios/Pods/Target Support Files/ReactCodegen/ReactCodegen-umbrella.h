@@ -34,6 +34,8 @@
 #import "rngesturehandler_codegenJSI.h"
 #import "RNLlamaSpec/RNLlamaSpec.h"
 #import "RNLlamaSpecJSI.h"
+#import "RNPermissionsSpec/RNPermissionsSpec.h"
+#import "RNPermissionsSpecJSI.h"
 #import "rnscreens/rnscreens.h"
 #import "rnscreensJSI.h"
 #import "RNVectorIconsSpec/RNVectorIconsSpec.h"
