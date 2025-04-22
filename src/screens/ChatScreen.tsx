@@ -81,6 +81,9 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
   const [inputHeight, setInputHeight] = useState(45);
 
+  // Flag to ignore stray onSpeech* callbacks when we are purposely stopping
+  const isStoppingRef = useRef(false);
+
   // Load the model and chat when component mounts
   useEffect(() => {
     loadModel(selectedModel);
@@ -910,8 +913,14 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
   // Initialize voice recognition
   useEffect(() => {
-    Voice.onSpeechStart = () => setIsRecording(true);
-    Voice.onSpeechEnd = () => setIsRecording(false);
+    Voice.onSpeechStart = () => {
+      if (isStoppingRef.current) return;
+      setIsRecording(true);
+    };
+    Voice.onSpeechEnd = () => {
+      if (isStoppingRef.current) return;
+      setIsRecording(false);
+    };
     Voice.onSpeechResults = (e: any) => {
       if (e.value && e.value[0]) {
         setUserInput(e.value[0]);
@@ -920,15 +929,37 @@ const ChatScreen = ({ route, navigation }: Props) => {
     Voice.onSpeechVolumeChanged = (e: any) => {
       setRecordingAmplitude(e.value / 10); // Normalize amplitude to 0-1 range
     };
+    
+    // Add error handler
+    Voice.onSpeechError = (e: any) => {
+      console.error('Voice recognition error:', e);
+      isStoppingRef.current = false;
+      setIsRecording(false);
+    };
 
     return () => {
       Voice.destroy().then(Voice.removeAllListeners);
     };
   }, []);
 
+  // Start recording and reflect UI state immediately
   const startRecording = async () => {
+    // Only start recording if we're not already recording
+    if (isRecording) {
+      console.log('Already recording, stopping first');
+      await stopRecording();
+      // Small delay to ensure proper cleanup
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    
     const hasPermission = await ensureVoicePermissions();
     if (!hasPermission) return;
+
+    // Reset stop flag so callbacks are processed
+    isStoppingRef.current = false;
+
+    // Give instant visual feedback
+    setIsRecording(true);
 
     try {
       await Voice.start('en-US', {
@@ -936,14 +967,43 @@ const ChatScreen = ({ route, navigation }: Props) => {
       });
     } catch (error) {
       console.error('Error starting voice recording:', error);
+      setIsRecording(false);
     }
   };
 
+  // Robust stop recording: force-terminate on both iOS & Android
   const stopRecording = async () => {
     try {
+      // Set the stopping flag before any async operations
+      isStoppingRef.current = true;
+      
+      // Force update UI state immediately
+      setIsRecording(false);
+      
+      // Try to gracefully stop first
       await Voice.stop();
+
+      /* 
+       * On some iOS versions `stop()` doesn't always trigger `onSpeechEnd`,
+       * so we also call `cancel()` as a fallback to ensure the engine
+       * actually shuts down.
+       */
+      await Voice.cancel();
+
+      // Small delay to ensure Voice API has time to clean up
+      setTimeout(() => {
+        // Reset flag after a delay to allow for cleanup
+        isStoppingRef.current = false;
+      }, 500);
+
+      // If we captured any text, keep it in the input box
+      // We don't auto-send anymore, giving the user a chance to edit
     } catch (error) {
       console.error('Error stopping voice recording:', error);
+      // Force UI update regardless of error
+      setIsRecording(false);
+      // Reset flag
+      isStoppingRef.current = false;
     }
   };
 
@@ -1142,33 +1202,34 @@ const ChatScreen = ({ route, navigation }: Props) => {
             >
               Stop
             </ButtonWithAnimation>
-          ) : isRecording ? (
-            <ButtonWithAnimation
-              onPress={stopRecording}
-              isStop={true}
-              style={styles.stopButton}
-              textStyle={{}}
-            >
-              Stop
-            </ButtonWithAnimation>
           ) : (
             <View style={styles.buttonRow}>
               <ButtonWithAnimation
-                onPress={startRecording}
-                style={styles.micButton}
+                onPress={isRecording ? stopRecording : startRecording}
+                style={[
+                  styles.micButton,
+                  isRecording && styles.stopButton // turn red while recording
+                ]}
                 isIcon={true}
               >
-                <Image 
-                  source={require('../../assets/justtalkorvent.png')}
-                  style={styles.micIcon}
-                  resizeMode="contain"
-                />
+                {isRecording ? (
+                  <View style={styles.stopIconContainer}>
+                    <View style={styles.stopIcon} />
+                  </View>
+                ) : (
+                  <Image
+                    source={require('../../assets/justtalkorvent.png')}
+                    style={styles.micIcon}
+                    resizeMode="contain"
+                  />
+                )}
               </ButtonWithAnimation>
+
               <ButtonWithAnimation
                 onPress={handleSendMessage}
                 style={[
                   styles.sendButton,
-                  !userInput.trim() || !context ? styles.sendButtonDisabled : {}
+                  (!userInput.trim() || !context) && styles.sendButtonDisabled
                 ]}
                 textStyle={{}}
               >
@@ -1540,6 +1601,18 @@ const styles = StyleSheet.create({
     width: Math.min(20, width * 0.05),
     height: Math.min(20, width * 0.05),
     tintColor: '#FFFFFF',
+  },
+  stopIconContainer: {
+    width: Math.min(20, width * 0.05),
+    height: Math.min(20, width * 0.05),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stopIcon: {
+    width: Math.min(12, width * 0.03),
+    height: Math.min(12, width * 0.03),
+    backgroundColor: '#FFFFFF',
+    borderRadius: 2,
   },
   waveformContainer: {
     position: 'absolute',
