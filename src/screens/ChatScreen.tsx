@@ -913,96 +913,104 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
   // Initialize voice recognition
   useEffect(() => {
-    Voice.onSpeechStart = () => {
-      if (isStoppingRef.current) return;
-      setIsRecording(true);
-    };
-    Voice.onSpeechEnd = () => {
-      if (isStoppingRef.current) return;
-      setIsRecording(false);
-    };
-    Voice.onSpeechResults = (e: any) => {
-      if (e.value && e.value[0]) {
-        setUserInput(e.value[0]);
+    const setupVoice = async () => {
+      try {
+        // Destroy any existing voice instance first
+        await Voice.destroy();
+        Voice.removeAllListeners();
+
+        // Set up new listeners
+        Voice.onSpeechStart = () => {
+          if (isStoppingRef.current) return;
+          setIsRecording(true);
+        };
+        Voice.onSpeechEnd = () => {
+          if (isStoppingRef.current) return;
+          setIsRecording(false);
+        };
+        Voice.onSpeechResults = (e: any) => {
+          if (e.value && e.value[0]) {
+            setUserInput(e.value[0]);
+          }
+        };
+        Voice.onSpeechVolumeChanged = (e: any) => {
+          setRecordingAmplitude(e.value / 10); // Normalize amplitude to 0-1 range
+        };
+        Voice.onSpeechError = (e: any) => {
+          console.error('Voice recognition error:', e);
+          isStoppingRef.current = false;
+          setIsRecording(false);
+        };
+      } catch (error) {
+        console.error('Error setting up voice recognition:', error);
       }
     };
-    Voice.onSpeechVolumeChanged = (e: any) => {
-      setRecordingAmplitude(e.value / 10); // Normalize amplitude to 0-1 range
-    };
-    
-    // Add error handler
-    Voice.onSpeechError = (e: any) => {
-      console.error('Voice recognition error:', e);
-      isStoppingRef.current = false;
-      setIsRecording(false);
-    };
+
+    setupVoice();
 
     return () => {
-      Voice.destroy().then(Voice.removeAllListeners);
+      const cleanup = async () => {
+        try {
+          await Voice.destroy();
+          Voice.removeAllListeners();
+        } catch (error) {
+          console.error('Error cleaning up voice recognition:', error);
+        }
+      };
+      cleanup();
     };
   }, []);
 
-  // Start recording and reflect UI state immediately
-  const startRecording = async () => {
-    // Only start recording if we're not already recording
-    if (isRecording) {
-      console.log('Already recording, stopping first');
-      await stopRecording();
-      // Small delay to ensure proper cleanup
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-    
-    const hasPermission = await ensureVoicePermissions();
-    if (!hasPermission) return;
-
-    // Reset stop flag so callbacks are processed
-    isStoppingRef.current = false;
-
-    // Give instant visual feedback
-    setIsRecording(true);
-
+  // Toggle recording state
+  const toggleRecording = async () => {
     try {
+      // If already recording, stop
+      if (isRecording) {
+        // Set the stopping flag before any async operations
+        isStoppingRef.current = true;
+        
+        // Force update UI state immediately
+        setIsRecording(false);
+        
+        // Try to gracefully stop
+        await Voice.stop();
+        await Voice.cancel(); // Added for more reliable cleanup
+        
+        // Reset flag after a delay to allow for cleanup
+        setTimeout(() => {
+          isStoppingRef.current = false;
+        }, 500);
+        
+        return;
+      }
+      
+      // Not recording, so start recording
+      const hasPermission = await ensureVoicePermissions();
+      if (!hasPermission) {
+        Alert.alert(
+          'Permission Required',
+          'Please grant microphone permission to use voice recording.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Reset stop flag so callbacks are processed
+      isStoppingRef.current = false;
+
+      // Give instant visual feedback
+      setIsRecording(true);
+
+      // Start voice recognition with error handling
       await Voice.start('en-US', {
-        EXTRA_PREFER_OFFLINE: true // Android flag for offline recognition
+        EXTRA_PREFER_OFFLINE: true,
+        EXTRA_LANGUAGE_MODEL: 'free_form',
+        EXTRA_MAX_RESULTS: 1,
+        EXTRA_PARTIAL_RESULTS: true
       });
     } catch (error) {
-      console.error('Error starting voice recording:', error);
+      console.error('Error toggling voice recording:', error);
       setIsRecording(false);
-    }
-  };
-
-  // Robust stop recording: force-terminate on both iOS & Android
-  const stopRecording = async () => {
-    try {
-      // Set the stopping flag before any async operations
-      isStoppingRef.current = true;
-      
-      // Force update UI state immediately
-      setIsRecording(false);
-      
-      // Try to gracefully stop first
-      await Voice.stop();
-
-      /* 
-       * On some iOS versions `stop()` doesn't always trigger `onSpeechEnd`,
-       * so we also call `cancel()` as a fallback to ensure the engine
-       * actually shuts down.
-       */
-      await Voice.cancel();
-
-      // Small delay to ensure Voice API has time to clean up
-      setTimeout(() => {
-        // Reset flag after a delay to allow for cleanup
-        isStoppingRef.current = false;
-      }, 500);
-
-      // If we captured any text, keep it in the input box
-      // We don't auto-send anymore, giving the user a chance to edit
-    } catch (error) {
-      console.error('Error stopping voice recording:', error);
-      // Force UI update regardless of error
-      setIsRecording(false);
-      // Reset flag
       isStoppingRef.current = false;
     }
   };
@@ -1160,6 +1168,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
           </View>
         </ScrollView>
         
+        {isRecording && (
+          <View style={styles.floatingRecordingIndicator}>
+            <AudioWaveform
+              isRecording={isRecording}
+              color={COLORS.primary}
+            />
+          </View>
+        )}
+        
         <View style={styles.inputContainer}>
           <TextInput
             style={[
@@ -1184,15 +1201,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
             textAlignVertical="top"
             numberOfLines={3}
           />
-          {isRecording && (
-            <View style={styles.waveformContainer}>
-              <AudioWaveform
-                isRecording={isRecording}
-                amplitude={recordingAmplitude}
-                color={COLORS.primary}
-              />
-            </View>
-          )}
+          
           {isGenerating ? (
             <ButtonWithAnimation
               onPress={stopGeneration}
@@ -1205,7 +1214,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
           ) : (
             <View style={styles.buttonRow}>
               <ButtonWithAnimation
-                onPress={isRecording ? stopRecording : startRecording}
+                onPress={toggleRecording}  
                 style={[
                   styles.micButton,
                   isRecording && styles.stopButton // turn red while recording
@@ -1620,6 +1629,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+  },
+  floatingRecordingIndicator: {
+    position: 'absolute',
+    bottom: 80, // Place it closer to the chat section
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 100,
   },
 });
 

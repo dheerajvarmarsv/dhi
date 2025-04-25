@@ -1,85 +1,90 @@
 import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Text, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Text, Animated, Easing } from 'react-native';
 
 interface AudioWaveformProps {
   isRecording: boolean;
-  amplitude: number;
   color: string;
 }
 
-const { width } = Dimensions.get('window');
-
-// Simple temporary solution with a pulsing animation
+// Simplified recording indicator with pulsing animation
 export const AudioWaveform: React.FC<AudioWaveformProps> = ({ isRecording, color }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
   
   useEffect(() => {
     if (isRecording) {
       // Create a pulsing animation
-      Animated.loop(
+      animationRef.current = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.1,
-            duration: 500,
+            toValue: 1.2,
+            duration: 600,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 500,
+            duration: 600,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      animationRef.current.start();
     } else {
       // Stop the animation when not recording
-      pulseAnim.stopAnimation();
+      if (animationRef.current) {
+        animationRef.current.stop();
+      }
+      pulseAnim.setValue(1);
     }
     
     return () => {
-      pulseAnim.stopAnimation();
+      if (animationRef.current) {
+        animationRef.current.stop();
+      }
     };
   }, [isRecording]);
   
   if (!isRecording) return null;
   
   return (
-    <View style={styles.container}>
-      <Animated.View 
-        style={[
-          styles.recordingIndicator, 
-          { 
-            backgroundColor: color,
-            transform: [{ scale: pulseAnim }]
-          }
-        ]}
-      >
-        <Text style={styles.recordingText}>Recording...</Text>
-      </Animated.View>
-    </View>
+    <Animated.View 
+      style={[
+        styles.recordingIndicator, 
+        { 
+          backgroundColor: color,
+          transform: [{ scale: pulseAnim }]
+        }
+      ]}
+    >
+      <Text style={styles.recordingText}>Recording...</Text>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    width: width * 0.8,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   recordingIndicator: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    justifyContent: 'center',
+    backgroundColor: '#FF3B30',
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   recordingText: {
     color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
-    fontSize: 16,
-  }
+  },
 });
 
 export default AudioWaveform; 

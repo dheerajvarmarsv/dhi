@@ -1,42 +1,45 @@
-import { Platform, Alert } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 import {
   checkMultiple,
   requestMultiple,
   PERMISSIONS,
-  RESULTS,
-  openSettings
+  RESULTS
 } from 'react-native-permissions';
 
-export async function ensureVoicePermissions() {
-  const perms = Platform.select({
-    ios: [PERMISSIONS.IOS.MICROPHONE, PERMISSIONS.IOS.SPEECH_RECOGNITION],
-    android: [PERMISSIONS.ANDROID.RECORD_AUDIO]
-  })!;
-
-  // Check existing permissions
-  const statuses = await checkMultiple(perms);
-
-  // Filter permissions that haven't been granted yet
-  const need = perms.filter(p => statuses[p] !== RESULTS.GRANTED);
-  if (need.length) {
-    const res = await requestMultiple(need);
-    const denied = need.filter(p => res[p] !== RESULTS.GRANTED);
-
-    // If any permissions are still denied, prompt to open settings
-    if (denied.length) {
-      Alert.alert(
-        'Voice chat needs your mic',
-        Platform.select({
-          ios: 'Open Settings and enable microphone & speech recognition.',
-          android: 'Open Settings and enable microphone access.'
-        }),
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Settings', onPress: openSettings }
-        ]
+export const ensureVoicePermissions = async (): Promise<boolean> => {
+  try {
+    if (Platform.OS === 'android') {
+      // Request microphone permission for Android
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        {
+          title: 'Microphone Permission',
+          message: 'EdgeLLM needs access to your microphone for voice recording.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        }
       );
-      return false;
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } else if (Platform.OS === 'ios') {
+      // Request speech recognition and microphone permissions for iOS
+      const permissions = [PERMISSIONS.IOS.SPEECH_RECOGNITION, PERMISSIONS.IOS.MICROPHONE];
+      const statuses = await checkMultiple(permissions);
+      
+      // Check if any permissions are denied
+      const denied = permissions.filter(p => statuses[p] !== RESULTS.GRANTED);
+      
+      if (denied.length > 0) {
+        const results = await requestMultiple(denied);
+        return denied.every(p => results[p] === RESULTS.GRANTED);
+      }
+      
+      return true;
     }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking/requesting permissions:', error);
+    return false;
   }
-  return true;
-} 
+}; 
