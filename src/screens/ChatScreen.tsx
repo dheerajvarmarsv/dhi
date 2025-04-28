@@ -911,80 +911,49 @@ const ChatScreen = ({ route, navigation }: Props) => {
     return iconMap[iconPath] || require('../../assets/understand.png');
   };
 
-  // Initialize voice recognition
-  useEffect(() => {
-    const setupVoice = async () => {
-      try {
-        // Destroy any existing voice instance first
-        await Voice.destroy();
-        Voice.removeAllListeners();
-
-        // Set up new listeners
-        Voice.onSpeechStart = () => {
-          if (isStoppingRef.current) return;
-          setIsRecording(true);
-        };
-        Voice.onSpeechEnd = () => {
-          if (isStoppingRef.current) return;
-          setIsRecording(false);
-        };
-        Voice.onSpeechResults = (e: any) => {
-          if (e.value && e.value[0]) {
-            setUserInput(e.value[0]);
-          }
-        };
-        Voice.onSpeechVolumeChanged = (e: any) => {
-          setRecordingAmplitude(e.value / 10); // Normalize amplitude to 0-1 range
-        };
-        Voice.onSpeechError = (e: any) => {
-          console.error('Voice recognition error:', e);
-          isStoppingRef.current = false;
-          setIsRecording(false);
-        };
-      } catch (error) {
-        console.error('Error setting up voice recognition:', error);
-      }
-    };
-
-    setupVoice();
-
-    return () => {
-      const cleanup = async () => {
-        try {
-          await Voice.destroy();
-          Voice.removeAllListeners();
-        } catch (error) {
-          console.error('Error cleaning up voice recognition:', error);
-        }
-      };
-      cleanup();
-    };
-  }, []);
-
   // Toggle recording state
   const toggleRecording = async () => {
     try {
       // If already recording, stop
       if (isRecording) {
-        // Set the stopping flag before any async operations
+        // Set stopping flag and update UI immediately
         isStoppingRef.current = true;
-        
-        // Force update UI state immediately
         setIsRecording(false);
-        
-        // Try to gracefully stop
-        await Voice.stop();
-        await Voice.cancel(); // Added for more reliable cleanup
-        
-        // Reset flag after a delay to allow for cleanup
-        setTimeout(() => {
+        setRecordingAmplitude(0);
+
+        try {
+          // First destroy any existing instance to clean up audio session
+          await Voice.destroy();
+          
+          // Remove all listeners before stopping
+          Voice.removeAllListeners();
+          
+          // Wait a bit for audio session to clean up
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // Reset flags
           isStoppingRef.current = false;
-        }, 500);
-        
+          
+          // Reinitialize voice with fresh listeners
+          await setupVoiceListeners();
+          
+        } catch (stopError) {
+          console.error('Error during recording stop sequence:', stopError);
+          // Force cleanup
+          try {
+            Voice.removeAllListeners();
+            await Voice.destroy();
+            await setupVoiceListeners();
+          } catch (cleanupError) {
+            console.error('Error during forced cleanup:', cleanupError);
+          }
+          // Reset flags even if there's an error
+          isStoppingRef.current = false;
+        }
         return;
       }
-      
-      // Not recording, so start recording
+
+      // Not recording, trying to start
       const hasPermission = await ensureVoicePermissions();
       if (!hasPermission) {
         Alert.alert(
@@ -995,25 +964,143 @@ const ChatScreen = ({ route, navigation }: Props) => {
         return;
       }
 
-      // Reset stop flag so callbacks are processed
+      // Clean start: First destroy any existing instance
+      try {
+        await Voice.destroy();
+        Voice.removeAllListeners();
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (error) {
+        console.error('Error resetting Voice instance:', error);
+      }
+
+      // Reset flags and UI state
       isStoppingRef.current = false;
+      setRecordingAmplitude(0);
 
-      // Give instant visual feedback
-      setIsRecording(true);
+      try {
+        // Setup fresh listeners
+        await setupVoiceListeners();
+        
+        // Start recording with timeout
+        const startTimeout = setTimeout(() => {
+          if (!isRecording) {
+            console.error('Start recording timeout');
+            setIsRecording(false);
+            setRecordingAmplitude(0);
+          }
+        }, 3000);
 
-      // Start voice recognition with error handling
-      await Voice.start('en-US', {
-        EXTRA_PREFER_OFFLINE: true,
-        EXTRA_LANGUAGE_MODEL: 'free_form',
-        EXTRA_MAX_RESULTS: 1,
-        EXTRA_PARTIAL_RESULTS: true
-      });
+        await Voice.start('en-US');
+        clearTimeout(startTimeout);
+      } catch (startError) {
+        console.error('Error starting recording:', startError);
+        setIsRecording(false);
+        setRecordingAmplitude(0);
+        Alert.alert(
+          'Recording Error',
+          'Failed to start recording. Please try again.'
+        );
+      }
     } catch (error) {
-      console.error('Error toggling voice recording:', error);
+      console.error('Error in toggleRecording:', error);
+      // Reset to safe state
       setIsRecording(false);
+      setRecordingAmplitude(0);
       isStoppingRef.current = false;
+      await Voice.destroy();
     }
   };
+
+  // Helper function to setup voice listeners
+  const setupVoiceListeners = async () => {
+    try {
+      Voice.removeAllListeners();
+      
+      Voice.onSpeechStart = () => {
+        if (!isStoppingRef.current) {
+          console.log('Speech started');
+          setIsRecording(true);
+        }
+      };
+      
+      Voice.onSpeechEnd = () => {
+        console.log('Speech ended');
+        if (!isStoppingRef.current) {
+          setIsRecording(false);
+          setRecordingAmplitude(0);
+        }
+      };
+      
+      Voice.onSpeechResults = (e: any) => {
+        if (!isStoppingRef.current && e.value && e.value[0]) {
+          console.log('Speech results:', e.value[0]);
+          setUserInput(e.value[0]);
+        }
+      };
+      
+      Voice.onSpeechVolumeChanged = (e: any) => {
+        if (!isStoppingRef.current) {
+          setRecordingAmplitude(e.value / 10);
+        }
+      };
+      
+      Voice.onSpeechError = (e: any) => {
+        console.error('Voice recognition error:', e);
+        
+        // Only show error if not intentionally stopping
+        if (!isStoppingRef.current) {
+          setIsRecording(false);
+          setRecordingAmplitude(0);
+          Alert.alert(
+            'Recording Error',
+            'There was an error with the voice recording. Please try again.'
+          );
+        }
+        
+        // Always reset flags and cleanup
+        isStoppingRef.current = false;
+      };
+    } catch (error) {
+      console.error('Error setting up voice listeners:', error);
+      throw error; // Propagate error to be handled by caller
+    }
+  };
+
+  // Initialize voice recognition with the new setup
+  useEffect(() => {
+    let mounted = true;
+
+    const initVoice = async () => {
+      if (!mounted) return;
+      
+      try {
+        await Voice.destroy();
+        Voice.removeAllListeners();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await setupVoiceListeners();
+      } catch (error) {
+        console.error('Error initializing voice recognition:', error);
+      }
+    };
+
+    initVoice();
+
+    return () => {
+      mounted = false;
+      const cleanup = async () => {
+        try {
+          isStoppingRef.current = true;
+          setIsRecording(false);
+          setRecordingAmplitude(0);
+          Voice.removeAllListeners();
+          await Voice.destroy();
+        } catch (error) {
+          console.error('Error cleaning up voice recognition:', error);
+        }
+      };
+      cleanup();
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
