@@ -2603,7 +2603,7 @@
 		46EB2E0001DE90 /* Voice.m in Sources */ = {isa = PBXBuildFile; fileRef = 46EB2E0000F840 /* Voice.m */; };
 		46EB2E0001DEA0 /* Voice.h in Headers */ = {isa = PBXBuildFile; fileRef = 46EB2E0000F830 /* Voice.h */; settings = {ATTRIBUTES = (Project, ); }; };
 		46EB2E0001DF00 /* react-native-voice-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 46EB2E0001DEF0 /* react-native-voice-dummy.m */; };
-		46EB2E0001E010 /* Pods-EdgeLLM-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 46EB2E0001E000 /* Pods-EdgeLLM-dummy.m */; };
+		46EB2E0001E010 /* Pods-dhi-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 46EB2E0001E000 /* Pods-dhi-dummy.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -11536,13 +11536,13 @@
 		46EB2E0001DED0 /* react-native-voice.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "react-native-voice.release.xcconfig"; sourceTree = "<group>"; };
 		46EB2E0001DEE0 /* react-native-voice-prefix.pch */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "react-native-voice-prefix.pch"; sourceTree = "<group>"; };
 		46EB2E0001DEF0 /* react-native-voice-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "react-native-voice-dummy.m"; sourceTree = "<group>"; };
-		46EB2E0001DFA0 /* Pods-EdgeLLM.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-EdgeLLM.release.xcconfig"; sourceTree = "<group>"; };
-		46EB2E0001DFB0 /* Pods-EdgeLLM.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-EdgeLLM.debug.xcconfig"; sourceTree = "<group>"; };
-		46EB2E0001DFC0 /* Pods-EdgeLLM-frameworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-EdgeLLM-frameworks.sh"; sourceTree = "<group>"; };
-		46EB2E0001DFD0 /* Pods-EdgeLLM-resources.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-EdgeLLM-resources.sh"; sourceTree = "<group>"; };
-		46EB2E0001DFE0 /* Pods-EdgeLLM-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-EdgeLLM-acknowledgements.plist"; sourceTree = "<group>"; };
-		46EB2E0001DFF0 /* Pods-EdgeLLM-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-EdgeLLM-acknowledgements.markdown"; sourceTree = "<group>"; };
-		46EB2E0001E000 /* Pods-EdgeLLM-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-EdgeLLM-dummy.m"; sourceTree = "<group>"; };
+		46EB2E0001DFA0 /* Pods-dhi.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-dhi.release.xcconfig"; sourceTree = "<group>"; };
+		46EB2E0001DFB0 /* Pods-dhi.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-dhi.debug.xcconfig"; sourceTree = "<group>"; };
+		46EB2E0001DFC0 /* Pods-dhi-frameworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-dhi-frameworks.sh"; sourceTree = "<group>"; };
+		46EB2E0001DFD0 /* Pods-dhi-resources.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-dhi-resources.sh"; sourceTree = "<group>"; };
+		46EB2E0001DFE0 /* Pods-dhi-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-dhi-acknowledgements.plist"; sourceTree = "<group>"; };
+		46EB2E0001DFF0 /* Pods-dhi-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-dhi-acknowledgements.markdown"; sourceTree = "<group>"; };
+		46EB2E0001E000 /* Pods-dhi-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-dhi-dummy.m"; sourceTree = "<group>"; };
 		4CC54C79E5C34490D96A7411A3DA9565 /* RNPermissions-RNPermissionsPrivacyInfo */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = "RNPermissions-RNPermissionsPrivacyInfo"; path = RNPermissionsPrivacyInfo.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		4F3E9C98444FA55E416B857143C48013 /* React-RuntimeHermes */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-RuntimeHermes"; path = "libReact-RuntimeHermes.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		50B5347C9A6E93B7D4CFC3673BA6FB7E /* RNScreens */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = RNScreens; path = libRNScreens.a; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -11551,7 +11551,6 @@
 		5AA54A19E2135E09B9C8C0767385FD3A /* React-graphics */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-graphics"; path = "libReact-graphics.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		60D5A56E763D6E7C4FBE797565062EEA /* React-nativeconfig */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-nativeconfig"; path = "libReact-nativeconfig.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		61A80F68AE163B384B7D7A9E76B6046C /* React-FabricImage */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-FabricImage"; path = "libReact-FabricImage.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		63124BB2F9CE84C4C2AED39A3088E478 /* Pods-EdgeLLM */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "Pods-EdgeLLM"; path = "libPods-EdgeLLM.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		65D0A19C165FA1126B1360680FE6DB12 /* Yoga */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = Yoga; path = libYoga.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		666E72807891C591E025A75410CD2A26 /* React-perflogger */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-perflogger"; path = "libReact-perflogger.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6771D231F4C8C5976470A369C474B32E /* React-CoreModules */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-CoreModules"; path = "libReact-CoreModules.a"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -11571,6 +11570,7 @@
 		A5B49761F8D1EB12585DD45CAA2E489F /* React-logger */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-logger"; path = "libReact-logger.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A67E85E5F06FDA406D3A1B378BDF0C5C /* React-runtimescheduler */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-runtimescheduler"; path = "libReact-runtimescheduler.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A68E5A9B69A3BA0FD52CAF7A354EC93B /* React-RCTNetwork */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-RCTNetwork"; path = "libReact-RCTNetwork.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4B15329CDD0E2A8E66DE7F24EC6FCB2 /* Pods-dhi */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "Pods-dhi"; path = "libPods-dhi.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B7610E9FDE749C16C0B1CDAAF3B2DDC2 /* React-utils */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = "React-utils"; path = "libReact-utils.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B8CD4B9B578CE9FA38114B638C9CAA78 /* RNCMaskedView */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; name = RNCMaskedView; path = libRNCMaskedView.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		BA6198501C8FE4824D863DC9EF32C614 /* RCT-Folly-RCT-Folly_privacy */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = "RCT-Folly-RCT-Folly_privacy"; path = "RCT-Folly_privacy.bundle"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -12130,7 +12130,7 @@
 				3CA7A9404CCDD6BA22C97F8348CE3209 /* glog */,
 				FFDAD994FE728F76EC459CC05E0CCDFB /* glog-glog_privacy */,
 				8777DE89DE15F16DCB64B459959DB8B3 /* llama-rn */,
-				63124BB2F9CE84C4C2AED39A3088E478 /* Pods-EdgeLLM */,
+				B4B15329CDD0E2A8E66DE7F24EC6FCB2 /* Pods-dhi */,
 				1936453FF2A7E3A13063C4917C4D5598 /* RCT-Folly */,
 				BA6198501C8FE4824D863DC9EF32C614 /* RCT-Folly-RCT-Folly_privacy */,
 				33EEBF1D210254B5452CE560F81C9D38 /* RCTDeprecation */,
@@ -12210,7 +12210,7 @@
 		46EB2E00000070 /* Targets Support Files */ = {
 			isa = PBXGroup;
 			children = (
-				46EB2E0001DF90 /* Pods-EdgeLLM */,
+				46EB2E0001DF90 /* Pods-dhi */,
 			);
 			name = "Targets Support Files";
 			sourceTree = "<group>";
@@ -19917,19 +19917,19 @@
 			path = "../../../ios/Pods/Target Support Files/react-native-voice";
 			sourceTree = "<group>";
 		};
-		46EB2E0001DF90 /* Pods-EdgeLLM */ = {
+		46EB2E0001DF90 /* Pods-dhi */ = {
 			isa = PBXGroup;
 			children = (
-				46EB2E0001DFF0 /* Pods-EdgeLLM-acknowledgements.markdown */,
-				46EB2E0001DFE0 /* Pods-EdgeLLM-acknowledgements.plist */,
-				46EB2E0001E000 /* Pods-EdgeLLM-dummy.m */,
-				46EB2E0001DFC0 /* Pods-EdgeLLM-frameworks.sh */,
-				46EB2E0001DFD0 /* Pods-EdgeLLM-resources.sh */,
-				46EB2E0001DFB0 /* Pods-EdgeLLM.debug.xcconfig */,
-				46EB2E0001DFA0 /* Pods-EdgeLLM.release.xcconfig */,
+				46EB2E0001DFF0 /* Pods-dhi-acknowledgements.markdown */,
+				46EB2E0001DFE0 /* Pods-dhi-acknowledgements.plist */,
+				46EB2E0001E000 /* Pods-dhi-dummy.m */,
+				46EB2E0001DFC0 /* Pods-dhi-frameworks.sh */,
+				46EB2E0001DFD0 /* Pods-dhi-resources.sh */,
+				46EB2E0001DFB0 /* Pods-dhi.debug.xcconfig */,
+				46EB2E0001DFA0 /* Pods-dhi.release.xcconfig */,
 			);
-			name = "Pods-EdgeLLM";
-			path = "Target Support Files/Pods-EdgeLLM";
+			name = "Pods-dhi";
+			path = "Target Support Files/Pods-dhi";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -22947,6 +22947,100 @@
 			productReference = C07C429E887D0FBD7D457208EF1B14CD /* ReactAppDependencyProvider */;
 			productType = "com.apple.product-type.library.static";
 		};
+		6FACC8FB7629DD6ED4FF124820B26598 /* Pods-dhi */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 46EB2E0001DF20 /* Build configuration list for PBXNativeTarget "Pods-dhi" */;
+			buildPhases = (
+				46EB2E0001DF60 /* Headers */,
+				46EB2E0001DF70 /* Sources */,
+				46EB2E0001DF80 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				46EB2E0001E0A0 /* PBXTargetDependency */,
+				46EB2E0001E0C0 /* PBXTargetDependency */,
+				46EB2E0001E0E0 /* PBXTargetDependency */,
+				46EB2E0001E100 /* PBXTargetDependency */,
+				46EB2E0001E120 /* PBXTargetDependency */,
+				46EB2E0001E140 /* PBXTargetDependency */,
+				46EB2E0001E160 /* PBXTargetDependency */,
+				46EB2E0001E180 /* PBXTargetDependency */,
+				46EB2E0001E1A0 /* PBXTargetDependency */,
+				46EB2E0001E1C0 /* PBXTargetDependency */,
+				46EB2E0001E1E0 /* PBXTargetDependency */,
+				46EB2E0001E200 /* PBXTargetDependency */,
+				46EB2E0001E220 /* PBXTargetDependency */,
+				46EB2E0001E240 /* PBXTargetDependency */,
+				46EB2E0001E260 /* PBXTargetDependency */,
+				46EB2E0001E280 /* PBXTargetDependency */,
+				46EB2E0001E2A0 /* PBXTargetDependency */,
+				46EB2E0001E2C0 /* PBXTargetDependency */,
+				46EB2E0001E2E0 /* PBXTargetDependency */,
+				46EB2E0001E300 /* PBXTargetDependency */,
+				46EB2E0001E320 /* PBXTargetDependency */,
+				46EB2E0001E340 /* PBXTargetDependency */,
+				46EB2E0001E360 /* PBXTargetDependency */,
+				46EB2E0001E380 /* PBXTargetDependency */,
+				46EB2E0001E3A0 /* PBXTargetDependency */,
+				46EB2E0001E3C0 /* PBXTargetDependency */,
+				46EB2E0001E3E0 /* PBXTargetDependency */,
+				46EB2E0001E400 /* PBXTargetDependency */,
+				46EB2E0001E420 /* PBXTargetDependency */,
+				46EB2E0001E440 /* PBXTargetDependency */,
+				46EB2E0001E460 /* PBXTargetDependency */,
+				46EB2E0001E480 /* PBXTargetDependency */,
+				46EB2E0001E4A0 /* PBXTargetDependency */,
+				46EB2E0001E4C0 /* PBXTargetDependency */,
+				46EB2E0001E4E0 /* PBXTargetDependency */,
+				46EB2E0001E500 /* PBXTargetDependency */,
+				46EB2E0001E520 /* PBXTargetDependency */,
+				46EB2E0001E540 /* PBXTargetDependency */,
+				46EB2E0001E560 /* PBXTargetDependency */,
+				46EB2E0001E580 /* PBXTargetDependency */,
+				46EB2E0001E5A0 /* PBXTargetDependency */,
+				46EB2E0001E5C0 /* PBXTargetDependency */,
+				46EB2E0001E5E0 /* PBXTargetDependency */,
+				46EB2E0001E600 /* PBXTargetDependency */,
+				46EB2E0001E620 /* PBXTargetDependency */,
+				46EB2E0001E640 /* PBXTargetDependency */,
+				46EB2E0001E660 /* PBXTargetDependency */,
+				46EB2E0001E680 /* PBXTargetDependency */,
+				46EB2E0001E6A0 /* PBXTargetDependency */,
+				46EB2E0001E6C0 /* PBXTargetDependency */,
+				46EB2E0001E6E0 /* PBXTargetDependency */,
+				46EB2E0001E700 /* PBXTargetDependency */,
+				46EB2E0001E720 /* PBXTargetDependency */,
+				46EB2E0001E740 /* PBXTargetDependency */,
+				46EB2E0001E760 /* PBXTargetDependency */,
+				46EB2E0001E780 /* PBXTargetDependency */,
+				46EB2E0001E7A0 /* PBXTargetDependency */,
+				46EB2E0001E7C0 /* PBXTargetDependency */,
+				46EB2E0001E7E0 /* PBXTargetDependency */,
+				46EB2E0001E800 /* PBXTargetDependency */,
+				46EB2E0001E820 /* PBXTargetDependency */,
+				46EB2E0001E840 /* PBXTargetDependency */,
+				46EB2E0001E860 /* PBXTargetDependency */,
+				46EB2E0001E880 /* PBXTargetDependency */,
+				46EB2E0001E8A0 /* PBXTargetDependency */,
+				46EB2E0001E8C0 /* PBXTargetDependency */,
+				46EB2E0001E8E0 /* PBXTargetDependency */,
+				46EB2E0001E900 /* PBXTargetDependency */,
+				46EB2E0001E920 /* PBXTargetDependency */,
+				46EB2E0001E940 /* PBXTargetDependency */,
+				46EB2E0001E960 /* PBXTargetDependency */,
+				46EB2E0001E980 /* PBXTargetDependency */,
+				46EB2E0001E9A0 /* PBXTargetDependency */,
+				46EB2E0001E9C0 /* PBXTargetDependency */,
+				46EB2E0001E9E0 /* PBXTargetDependency */,
+				46EB2E0001EA00 /* PBXTargetDependency */,
+				46EB2E0001EA20 /* PBXTargetDependency */,
+			);
+			name = "Pods-dhi";
+			productName = "Pods-dhi";
+			productReference = B4B15329CDD0E2A8E66DE7F24EC6FCB2 /* Pods-dhi */;
+			productType = "com.apple.product-type.library.static";
+		};
 		6FE9147F8AAA4DE676C190F680F47AE2 /* React-RCTLinking */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 46EB2E000181A0 /* Build configuration list for PBXNativeTarget "React-RCTLinking" */;
@@ -23313,100 +23407,6 @@
 			name = "React-FabricImage";
 			productName = "React-FabricImage";
 			productReference = 61A80F68AE163B384B7D7A9E76B6046C /* React-FabricImage */;
-			productType = "com.apple.product-type.library.static";
-		};
-		A81B3FAA27942E9FB806D8D3CACEB1C6 /* Pods-EdgeLLM */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 46EB2E0001DF20 /* Build configuration list for PBXNativeTarget "Pods-EdgeLLM" */;
-			buildPhases = (
-				46EB2E0001DF60 /* Headers */,
-				46EB2E0001DF70 /* Sources */,
-				46EB2E0001DF80 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				46EB2E0001E0A0 /* PBXTargetDependency */,
-				46EB2E0001E0C0 /* PBXTargetDependency */,
-				46EB2E0001E0E0 /* PBXTargetDependency */,
-				46EB2E0001E100 /* PBXTargetDependency */,
-				46EB2E0001E120 /* PBXTargetDependency */,
-				46EB2E0001E140 /* PBXTargetDependency */,
-				46EB2E0001E160 /* PBXTargetDependency */,
-				46EB2E0001E180 /* PBXTargetDependency */,
-				46EB2E0001E1A0 /* PBXTargetDependency */,
-				46EB2E0001E1C0 /* PBXTargetDependency */,
-				46EB2E0001E1E0 /* PBXTargetDependency */,
-				46EB2E0001E200 /* PBXTargetDependency */,
-				46EB2E0001E220 /* PBXTargetDependency */,
-				46EB2E0001E240 /* PBXTargetDependency */,
-				46EB2E0001E260 /* PBXTargetDependency */,
-				46EB2E0001E280 /* PBXTargetDependency */,
-				46EB2E0001E2A0 /* PBXTargetDependency */,
-				46EB2E0001E2C0 /* PBXTargetDependency */,
-				46EB2E0001E2E0 /* PBXTargetDependency */,
-				46EB2E0001E300 /* PBXTargetDependency */,
-				46EB2E0001E320 /* PBXTargetDependency */,
-				46EB2E0001E340 /* PBXTargetDependency */,
-				46EB2E0001E360 /* PBXTargetDependency */,
-				46EB2E0001E380 /* PBXTargetDependency */,
-				46EB2E0001E3A0 /* PBXTargetDependency */,
-				46EB2E0001E3C0 /* PBXTargetDependency */,
-				46EB2E0001E3E0 /* PBXTargetDependency */,
-				46EB2E0001E400 /* PBXTargetDependency */,
-				46EB2E0001E420 /* PBXTargetDependency */,
-				46EB2E0001E440 /* PBXTargetDependency */,
-				46EB2E0001E460 /* PBXTargetDependency */,
-				46EB2E0001E480 /* PBXTargetDependency */,
-				46EB2E0001E4A0 /* PBXTargetDependency */,
-				46EB2E0001E4C0 /* PBXTargetDependency */,
-				46EB2E0001E4E0 /* PBXTargetDependency */,
-				46EB2E0001E500 /* PBXTargetDependency */,
-				46EB2E0001E520 /* PBXTargetDependency */,
-				46EB2E0001E540 /* PBXTargetDependency */,
-				46EB2E0001E560 /* PBXTargetDependency */,
-				46EB2E0001E580 /* PBXTargetDependency */,
-				46EB2E0001E5A0 /* PBXTargetDependency */,
-				46EB2E0001E5C0 /* PBXTargetDependency */,
-				46EB2E0001E5E0 /* PBXTargetDependency */,
-				46EB2E0001E600 /* PBXTargetDependency */,
-				46EB2E0001E620 /* PBXTargetDependency */,
-				46EB2E0001E640 /* PBXTargetDependency */,
-				46EB2E0001E660 /* PBXTargetDependency */,
-				46EB2E0001E680 /* PBXTargetDependency */,
-				46EB2E0001E6A0 /* PBXTargetDependency */,
-				46EB2E0001E6C0 /* PBXTargetDependency */,
-				46EB2E0001E6E0 /* PBXTargetDependency */,
-				46EB2E0001E700 /* PBXTargetDependency */,
-				46EB2E0001E720 /* PBXTargetDependency */,
-				46EB2E0001E740 /* PBXTargetDependency */,
-				46EB2E0001E760 /* PBXTargetDependency */,
-				46EB2E0001E780 /* PBXTargetDependency */,
-				46EB2E0001E7A0 /* PBXTargetDependency */,
-				46EB2E0001E7C0 /* PBXTargetDependency */,
-				46EB2E0001E7E0 /* PBXTargetDependency */,
-				46EB2E0001E800 /* PBXTargetDependency */,
-				46EB2E0001E820 /* PBXTargetDependency */,
-				46EB2E0001E840 /* PBXTargetDependency */,
-				46EB2E0001E860 /* PBXTargetDependency */,
-				46EB2E0001E880 /* PBXTargetDependency */,
-				46EB2E0001E8A0 /* PBXTargetDependency */,
-				46EB2E0001E8C0 /* PBXTargetDependency */,
-				46EB2E0001E8E0 /* PBXTargetDependency */,
-				46EB2E0001E900 /* PBXTargetDependency */,
-				46EB2E0001E920 /* PBXTargetDependency */,
-				46EB2E0001E940 /* PBXTargetDependency */,
-				46EB2E0001E960 /* PBXTargetDependency */,
-				46EB2E0001E980 /* PBXTargetDependency */,
-				46EB2E0001E9A0 /* PBXTargetDependency */,
-				46EB2E0001E9C0 /* PBXTargetDependency */,
-				46EB2E0001E9E0 /* PBXTargetDependency */,
-				46EB2E0001EA00 /* PBXTargetDependency */,
-				46EB2E0001EA20 /* PBXTargetDependency */,
-			);
-			name = "Pods-EdgeLLM";
-			productName = "Pods-EdgeLLM";
-			productReference = 63124BB2F9CE84C4C2AED39A3088E478 /* Pods-EdgeLLM */;
 			productType = "com.apple.product-type.library.static";
 		};
 		B5E1D7706FCB7EC5FF39F8CDA49A5653 /* React-ImageManager */ = {
@@ -23979,7 +23979,7 @@
 				9E6B7857CC223C0629E4C37E6386FC96 /* glog-glog_privacy */,
 				985FEA01F314F3C00F0C1E1181E6C4A5 /* hermes-engine */,
 				BC3A102791D68F0A2A86919D60E909B1 /* llama-rn */,
-				A81B3FAA27942E9FB806D8D3CACEB1C6 /* Pods-EdgeLLM */,
+				6FACC8FB7629DD6ED4FF124820B26598 /* Pods-dhi */,
 				EC55D52694092A9D0E6A78EB01207EB5 /* RCT-Folly */,
 				331AFAADB024F73370A9DC6FBD7A5A22 /* RCT-Folly-RCT-Folly_privacy */,
 				5211B5AB7B81060AA8E78614DD75D3AB /* RCTDeprecation */,
@@ -25513,7 +25513,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				46EB2E0001E010 /* Pods-EdgeLLM-dummy.m in Sources */,
+				46EB2E0001E010 /* Pods-dhi-dummy.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -34954,7 +34954,7 @@
 		};
 		46EB2E0001DF30 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 46EB2E0001DFA0 /* Pods-EdgeLLM.release.xcconfig */;
+			baseConfigurationReference = 46EB2E0001DFA0 /* Pods-dhi.release.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -34978,7 +34978,7 @@
 		};
 		46EB2E0001DF40 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 46EB2E0001DFB0 /* Pods-EdgeLLM.debug.xcconfig */;
+			baseConfigurationReference = 46EB2E0001DFB0 /* Pods-dhi.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -35758,7 +35758,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		46EB2E0001DF20 /* Build configuration list for PBXNativeTarget "Pods-EdgeLLM" */ = {
+		46EB2E0001DF20 /* Build configuration list for PBXNativeTarget "Pods-dhi" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				46EB2E0001DF40 /* Debug */,

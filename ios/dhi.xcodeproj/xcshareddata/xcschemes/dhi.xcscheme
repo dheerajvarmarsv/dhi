@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "EdgeLLM.app"
-               BlueprintName = "EdgeLLM"
-               ReferencedContainer = "container:EdgeLLM.xcodeproj">
+               BuildableName = "dhi.app"
+               BlueprintName = "dhi"
+               ReferencedContainer = "container:dhi.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "EdgeLLMTests.xctest"
-               BlueprintName = "EdgeLLMTests"
-               ReferencedContainer = "container:EdgeLLM.xcodeproj">
+               BuildableName = "dhiTests.xctest"
+               BlueprintName = "dhiTests"
+               ReferencedContainer = "container:dhi.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "EdgeLLM.app"
-            BlueprintName = "EdgeLLM"
-            ReferencedContainer = "container:EdgeLLM.xcodeproj">
+            BuildableName = "dhi.app"
+            BlueprintName = "dhi"
+            ReferencedContainer = "container:dhi.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "EdgeLLM.app"
-            BlueprintName = "EdgeLLM"
-            ReferencedContainer = "container:EdgeLLM.xcodeproj">
+            BuildableName = "dhi.app"
+            BlueprintName = "dhi"
+            ReferencedContainer = "container:dhi.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
