@@ -34,9 +34,6 @@ import PersonaSelector from '../components/PersonaSelector';
 import ChatSidebar from '../components/ChatSidebar';
 import { Message, ChatSession } from '../types';
 import { COLORS, FONTS } from '../constants/theme';
-import { ensureVoicePermissions } from '../utils/permissions';
-import Voice from '@react-native-community/voice';
-import { AudioWaveform } from '../components/AudioWaveform';
 
 // Get device dimensions for responsive design
 const { width, height } = Dimensions.get('window');
@@ -71,8 +68,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const [personaSelectorVisible, setPersonaSelectorVisible] = useState<boolean>(false);
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingAmplitude, setRecordingAmplitude] = useState(0);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollPositionRef = useRef(0);
@@ -80,9 +75,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const titleInputRef = useRef<TextInput>(null);
 
   const [inputHeight, setInputHeight] = useState(45);
-
-  // Flag to ignore stray onSpeech* callbacks when we are purposely stopping
-  const isStoppingRef = useRef(false);
 
   // Load the model and chat when component mounts
   useEffect(() => {
@@ -206,19 +198,36 @@ const ChatScreen = ({ route, navigation }: Props) => {
     try {
       // Create a new initial conversation with the selected persona's system prompt
       let initialConversation = [...INITIAL_CONVERSATION];
+      
       try {
+        // Get all personas including custom ones
         const allPersonas = await getAllPersonas();
         const selectedTemplate = allPersonas.find((p: PromptTemplate) => p.id === selectedPersonaId);
+        
         if (selectedTemplate && initialConversation.length > 0 && initialConversation[0].role === 'system') {
+          // Replace the system message with the selected persona's system prompt
           initialConversation[0] = {
             ...initialConversation[0],
             content: selectedTemplate.systemPrompt
           };
+        } else if (!selectedTemplate) {
+          // If persona not found, fall back to general
+          console.warn(`Selected persona ${selectedPersonaId} not found, using default`);
+          const defaultTemplate = promptTemplates.find(p => p.id === 'general') || promptTemplates[0];
+          
+          if (initialConversation.length > 0 && initialConversation[0].role === 'system') {
+            initialConversation[0] = {
+              ...initialConversation[0],
+              content: defaultTemplate.systemPrompt
+            };
+          }
         }
       } catch (error) {
         console.error('Error getting persona for new chat:', error);
+        // Continue with default system prompt
       }
       
+      // Create the chat session with the prepared conversation
       const newChat = await createChatSession(
         selectedModel, 
         'New Chat', 
@@ -235,10 +244,17 @@ const ChatScreen = ({ route, navigation }: Props) => {
         navigation.setParams({ chatId: newChat.id });
         
         return newChat;
+      } else {
+        throw new Error('Failed to create new chat');
       }
     } catch (error) {
       console.error('Error creating new chat:', error);
-      setConversation(INITIAL_CONVERSATION);
+      // Set up fallback conversation with minimal system prompt
+      const fallbackConversation: Message[] = [{
+        role: 'system' as const,
+        content: 'You are a helpful AI assistant. Respond to the user in a natural and helpful way.'
+      }];
+      setConversation(fallbackConversation);
     }
     return null;
   };
@@ -320,7 +336,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
       }
     }
 
-    const newUserMessage: Message = { role: 'user', content: userInput };
+    // Add user message to conversation
+    const newUserMessage: Message = { role: 'user', content: userInput.trim() };
     const updatedConversation = [...conversation, newUserMessage];
     setConversation(updatedConversation);
     setUserInput('');
@@ -340,6 +357,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
         }
       }
 
+      // Common stop words for all model formats
       const stopWords = [
         '</s>',
         '<|end|>',
@@ -349,8 +367,16 @@ const ChatScreen = ({ route, navigation }: Props) => {
         '<|eot_id|>',
       ];
       
-      // Format with the selected persona's prompt template
+      // Format with the selected persona's prompt template to ensure proper context
       const formattedMessages = formatPrompt([...updatedConversation], selectedPersonaId);
+
+      // Add instructions to maintain context from the conversation history
+      if (updatedConversation.length > 3) {
+        formattedMessages.push({
+          role: 'system',
+          content: 'Remember the context from our earlier messages in this conversation. Your response should be coherent with the ongoing discussion.'
+        });
+      }
 
       // Append a placeholder for the assistant's response
       setConversation((prev) => [
@@ -378,108 +404,117 @@ const ChatScreen = ({ route, navigation }: Props) => {
         };
       }
 
-      const result: CompletionResult = await context.completion(
-        {
-          messages: formattedMessages,
-          n_predict: 10000,
-          stop: stopWords,
-        },
-        (data: CompletionData) => {
-          const token = data.token;
-          currentAssistantMessage += token;
-          
-          // Handle Dhi Compass specific format with empathy_chain
-          if (selectedPersonaId === 'compass') {
-            if (token.includes('<empathy_chain>')) {
-              inEmpathyChain = true;
-              currentThought = token.replace('<empathy_chain>', '');
-              return; // Skip adding this to visible content
-            } else if (token.includes('</empathy_chain>')) {
-              inEmpathyChain = false;
-              const finalThought = currentThought.replace('</empathy_chain>', '').trim();
-              
+      try {
+        const result: CompletionResult = await context.completion(
+          {
+            messages: formattedMessages,
+            n_predict: 10000,
+            stop: stopWords,
+            // Add parameters to improve response quality and context retention
+            temperature: 0.7,  // Balanced creativity
+            top_p: 0.9,       // Focus on more likely tokens
+            top_k: 40,        // Consider a varied but relevant set of tokens
+          },
+          (data: CompletionData) => {
+            const token = data.token;
+            currentAssistantMessage += token;
+            
+            // Handle Dhi Compass specific format with empathy_chain
+            if (selectedPersonaId === 'compass') {
+              if (token.includes('<empathy_chain>')) {
+                inEmpathyChain = true;
+                currentThought = token.replace('<empathy_chain>', '');
+                return; // Skip adding this to visible content
+              } else if (token.includes('</empathy_chain>')) {
+                inEmpathyChain = false;
+                const finalThought = currentThought.replace('</empathy_chain>', '').trim();
+                
+                setConversation((prev) => {
+                  const lastIndex = prev.length - 1;
+                  const updated = [...prev];
+                  updated[lastIndex] = {
+                    ...updated[lastIndex],
+                    thought: finalThought,
+                  };
+                  return updated;
+                });
+                
+                currentThought = '';
+                return; // Skip adding this to visible content
+              } else if (inEmpathyChain) {
+                currentThought += token;
+                return; // Skip adding this to visible content
+              } else if (token.includes('<assistant_response>')) {
+                // Skip the tag but continue processing content inside
+                return;
+              } else if (token.includes('</assistant_response>')) {
+                // Skip the closing tag
+                return;
+              }
+            } else {
+              // Original think block format
+              if (token.includes('<think>')) {
+                inThinkBlock = true;
+                currentThought = token.replace('<think>', '');
+                return; // Skip adding this to visible content
+              } else if (token.includes('</think>')) {
+                inThinkBlock = false;
+                const finalThought = currentThought.replace('</think>', '').trim();
+
+                setConversation((prev) => {
+                  const lastIndex = prev.length - 1;
+                  const updated = [...prev];
+                  updated[lastIndex] = {
+                    ...updated[lastIndex],
+                    thought: finalThought,
+                  };
+                  return updated;
+                });
+
+                currentThought = '';
+                return; // Skip adding this to visible content
+              } else if (inThinkBlock) {
+                currentThought += token;
+                return; // Skip adding this to visible content
+              }
+            }
+
+            // Only update visible content with tokens that aren't part of thought process
+            if (!inEmpathyChain && !inThinkBlock) {
               setConversation((prev) => {
                 const lastIndex = prev.length - 1;
                 const updated = [...prev];
-                updated[lastIndex] = {
-                  ...updated[lastIndex],
-                  thought: finalThought,
-                };
+                
+                // Build visible content from scratch instead of filtering the whole message
+                if (!updated[lastIndex].content) {
+                  updated[lastIndex].content = token;
+                } else {
+                  updated[lastIndex].content += token;
+                }
+
+                // Only clean up when we have enough content to avoid removing too much
+                if (updated[lastIndex].content.length > 30) {
+                  // Apply minimal cleaning to preserve most content while removing obvious artifacts
+                  updated[lastIndex].content = sanitizeAssistantResponse(updated[lastIndex].content);
+                }
+                
                 return updated;
               });
-              
-              currentThought = '';
-              return; // Skip adding this to visible content
-            } else if (inEmpathyChain) {
-              currentThought += token;
-              return; // Skip adding this to visible content
-            } else if (token.includes('<assistant_response>')) {
-              // Skip the tag but continue processing content inside
-              return;
-            } else if (token.includes('</assistant_response>')) {
-              // Skip the closing tag
-              return;
             }
-          } else {
-            // Original think block format
-            if (token.includes('<think>')) {
-              inThinkBlock = true;
-              currentThought = token.replace('<think>', '');
-              return; // Skip adding this to visible content
-            } else if (token.includes('</think>')) {
-              inThinkBlock = false;
-              const finalThought = currentThought.replace('</think>', '').trim();
 
-              setConversation((prev) => {
-                const lastIndex = prev.length - 1;
-                const updated = [...prev];
-                updated[lastIndex] = {
-                  ...updated[lastIndex],
-                  thought: finalThought,
-                };
-                return updated;
+            if (autoScrollEnabled && scrollViewRef.current) {
+              requestAnimationFrame(() => {
+                scrollViewRef.current?.scrollToEnd({ animated: false });
               });
-
-              currentThought = '';
-              return; // Skip adding this to visible content
-            } else if (inThinkBlock) {
-              currentThought += token;
-              return; // Skip adding this to visible content
             }
           }
-
-          // Only update visible content with tokens that aren't part of thought process
-          if (!inEmpathyChain && !inThinkBlock) {
-            setConversation((prev) => {
-              const lastIndex = prev.length - 1;
-              const updated = [...prev];
-              
-              // Build visible content from scratch instead of filtering the whole message
-              if (!updated[lastIndex].content) {
-                updated[lastIndex].content = token;
-              } else {
-                updated[lastIndex].content += token;
-              }
-
-              // Post-process the visible content to remove any reasoning sections that weren't properly tagged
-              if (selectedPersonaId === 'compass' && updated[lastIndex].content.length > 30) {
-                const cleanedContent = cleanupEmotionSections(updated[lastIndex].content);
-                updated[lastIndex].content = cleanedContent;
-              }
-              
-              return updated;
-            });
-          }
-
-          if (autoScrollEnabled && scrollViewRef.current) {
-            requestAnimationFrame(() => {
-              scrollViewRef.current?.scrollToEnd({ animated: false });
-            });
-          }
-        }
-      );
+        );
+      } catch (error) {
+        console.error('Error during completion:', error);
+        Alert.alert('Error', 'Failed to generate a response. Please try again.');
+      }
       
-      // Save chat after completion
+      // Save chat after completion to maintain context between sessions
       await saveChat();
       
     } catch (error) {
@@ -490,38 +525,74 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   };
 
-  // Add a helper function to clean up the content
+  // Add a helper function to clean up the content - more focused, less aggressive cleaning
   const cleanupEmotionSections = (content: string): string => {
     // Store the original content to compare later
     const originalContent = content;
     
-    // Remove "Emotion: X" sections and anything between them and a double newline
-    content = content.replace(/Emotion:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+    // Only remove the most obvious reasoning markers and tags
     
-    // Remove "Underlying Factors & Distortions:" sections
-    content = content.replace(/Underlying Factors (?:&|and) Distortions:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+    // Remove prompt tags
+    content = content.replace(/<\/?empathy_chain>/g, '');
+    content = content.replace(/<\/?assistant_response>/g, '');
+    content = content.replace(/<\/?think>/g, '');
     
-    // Remove "Chosen Approach:" sections
-    content = content.replace(/Chosen Approach:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
-    
-    // Remove "Therapeutic Framing & Reasoning:" sections
-    content = content.replace(/Therapeutic Framing (?:&|and) Reasoning:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
-    
-    // Remove "Strategy:" sections
-    content = content.replace(/Strategy:[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
-    
-    // Remove lines with patterns like "- All-or-nothing thinking" (distortion descriptions)
-    content = content.replace(/- [A-Za-z\-]+(?:thinking|distortion|bias).*?\n/g, '');
+    // Remove obvious section headers for reasoning
+    content = content.replace(/^Emotion:.*?\n/g, '');
+    content = content.replace(/^Underlying Factors(?:.*?):\s*\n/g, '');
+    content = content.replace(/^Chosen Approach(?:.*?):\s*\n/g, '');
+    content = content.replace(/^Therapeutic Framing(?:.*?):\s*\n/g, '');
+    content = content.replace(/^Strategy(?:.*?):\s*\n/g, '');
     
     // Clean up excessive newlines
     content = content.replace(/\n{3,}/g, '\n\n');
     
-    // If we've removed too much content, just return the original to avoid issues
-    if (content.trim().length < 20 && originalContent.length > 100) {
-      return originalContent;
+    // If we've removed too much, revert to original with minimal cleaning
+    if (content.trim().length < 20 && originalContent.length > 50) {
+      // Just remove the tags but keep the content
+      let simpleCleanup = originalContent;
+      simpleCleanup = simpleCleanup.replace(/<\/?empathy_chain>/g, '');
+      simpleCleanup = simpleCleanup.replace(/<\/?assistant_response>/g, '');
+      simpleCleanup = simpleCleanup.replace(/<\/?think>/g, '');
+      return simpleCleanup.trim();
     }
     
     return content.trim();
+  };
+
+  // General purpose function with minimal cleaning to preserve most content
+  const sanitizeAssistantResponse = (content: string): string => {
+    // If compass persona, use specialized cleaning
+    if (selectedPersonaId === 'compass') {
+      return cleanupEmotionSections(content);
+    }
+    
+    // For all other personas - minimal cleaning
+    let cleaned = content;
+    
+    // Remove only the most obvious tags
+    cleaned = cleaned.replace(/<\/?think>/g, '');
+    cleaned = cleaned.replace(/<\/?empathy_chain>/g, '');
+    cleaned = cleaned.replace(/<\/?assistant_response>/g, '');
+    
+    // Only remove obvious prompt leakage
+    if (cleaned.includes('# Interaction/Personality Configuration Blueprint') || 
+        cleaned.includes('## Core Style Identity & Expertise Profile')) {
+      cleaned = cleaned.replace(/# Interaction\/Personality Configuration Blueprint[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
+    }
+    
+    if (cleaned.includes('# Natural Conversation Framework') || 
+        cleaned.includes('## Core Approach')) {
+      cleaned = cleaned.replace(/# Natural Conversation Framework[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
+    }
+    
+    // Remove any obvious reasoning marks
+    cleaned = cleaned.replace(/\(reason:.*?\)/g, '');
+    
+    // Clean up excessive newlines but preserve paragraph structure
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    
+    return cleaned.trim();
   };
 
   const stopGeneration = async () => {
@@ -911,197 +982,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
     return iconMap[iconPath] || require('../../assets/understand.png');
   };
 
-  // Toggle recording state
-  const toggleRecording = async () => {
-    try {
-      // If already recording, stop
-      if (isRecording) {
-        // Set stopping flag and update UI immediately
-        isStoppingRef.current = true;
-        setIsRecording(false);
-        setRecordingAmplitude(0);
-
-        try {
-          // First destroy any existing instance to clean up audio session
-          await Voice.destroy();
-          
-          // Remove all listeners before stopping
-          Voice.removeAllListeners();
-          
-          // Wait a bit for audio session to clean up
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          // Reset flags
-          isStoppingRef.current = false;
-          
-          // Reinitialize voice with fresh listeners
-          await setupVoiceListeners();
-          
-        } catch (stopError) {
-          console.error('Error during recording stop sequence:', stopError);
-          // Force cleanup
-          try {
-            Voice.removeAllListeners();
-            await Voice.destroy();
-            await setupVoiceListeners();
-          } catch (cleanupError) {
-            console.error('Error during forced cleanup:', cleanupError);
-          }
-          // Reset flags even if there's an error
-          isStoppingRef.current = false;
-        }
-        return;
-      }
-
-      // Not recording, trying to start
-      const hasPermission = await ensureVoicePermissions();
-      if (!hasPermission) {
-        Alert.alert(
-          'Permission Required',
-          'Please grant microphone permission to use voice recording.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      // Clean start: First destroy any existing instance
-      try {
-        await Voice.destroy();
-        Voice.removeAllListeners();
-        await new Promise(resolve => setTimeout(resolve, 200));
-      } catch (error) {
-        console.error('Error resetting Voice instance:', error);
-      }
-
-      // Reset flags and UI state
-      isStoppingRef.current = false;
-      setRecordingAmplitude(0);
-
-      try {
-        // Setup fresh listeners
-        await setupVoiceListeners();
-        
-        // Start recording with timeout
-        const startTimeout = setTimeout(() => {
-          if (!isRecording) {
-            console.error('Start recording timeout');
-            setIsRecording(false);
-            setRecordingAmplitude(0);
-          }
-        }, 3000);
-
-        await Voice.start('en-US');
-        clearTimeout(startTimeout);
-      } catch (startError) {
-        console.error('Error starting recording:', startError);
-        setIsRecording(false);
-        setRecordingAmplitude(0);
-        Alert.alert(
-          'Recording Error',
-          'Failed to start recording. Please try again.'
-        );
-      }
-    } catch (error) {
-      console.error('Error in toggleRecording:', error);
-      // Reset to safe state
-      setIsRecording(false);
-      setRecordingAmplitude(0);
-      isStoppingRef.current = false;
-      await Voice.destroy();
-    }
-  };
-
-  // Helper function to setup voice listeners
-  const setupVoiceListeners = async () => {
-    try {
-      Voice.removeAllListeners();
-      
-      Voice.onSpeechStart = () => {
-        if (!isStoppingRef.current) {
-          console.log('Speech started');
-          setIsRecording(true);
-        }
-      };
-      
-      Voice.onSpeechEnd = () => {
-        console.log('Speech ended');
-        if (!isStoppingRef.current) {
-          setIsRecording(false);
-          setRecordingAmplitude(0);
-        }
-      };
-      
-      Voice.onSpeechResults = (e: any) => {
-        if (!isStoppingRef.current && e.value && e.value[0]) {
-          console.log('Speech results:', e.value[0]);
-          setUserInput(e.value[0]);
-        }
-      };
-      
-      Voice.onSpeechVolumeChanged = (e: any) => {
-        if (!isStoppingRef.current) {
-          setRecordingAmplitude(e.value / 10);
-        }
-      };
-      
-      Voice.onSpeechError = (e: any) => {
-        console.error('Voice recognition error:', e);
-        
-        // Only show error if not intentionally stopping
-        if (!isStoppingRef.current) {
-          setIsRecording(false);
-          setRecordingAmplitude(0);
-          Alert.alert(
-            'Recording Error',
-            'There was an error with the voice recording. Please try again.'
-          );
-        }
-        
-        // Always reset flags and cleanup
-        isStoppingRef.current = false;
-      };
-    } catch (error) {
-      console.error('Error setting up voice listeners:', error);
-      throw error; // Propagate error to be handled by caller
-    }
-  };
-
-  // Initialize voice recognition with the new setup
-  useEffect(() => {
-    let mounted = true;
-
-    const initVoice = async () => {
-      if (!mounted) return;
-      
-      try {
-        await Voice.destroy();
-        Voice.removeAllListeners();
-        await new Promise(resolve => setTimeout(resolve, 200));
-        await setupVoiceListeners();
-      } catch (error) {
-        console.error('Error initializing voice recognition:', error);
-      }
-    };
-
-    initVoice();
-
-    return () => {
-      mounted = false;
-      const cleanup = async () => {
-        try {
-          isStoppingRef.current = true;
-          setIsRecording(false);
-          setRecordingAmplitude(0);
-          Voice.removeAllListeners();
-          await Voice.destroy();
-        } catch (error) {
-          console.error('Error cleaning up voice recognition:', error);
-        }
-      };
-      cleanup();
-    };
-  }, []);
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -1255,15 +1135,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
           </View>
         </ScrollView>
         
-        {isRecording && (
-          <View style={styles.floatingRecordingIndicator}>
-            <AudioWaveform
-              isRecording={isRecording}
-              color={COLORS.primary}
-            />
-          </View>
-        )}
-        
         <View style={styles.inputContainer}>
           <TextInput
             style={[
@@ -1283,7 +1154,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
             returnKeyType="default"
             autoCapitalize="none"
             autoCorrect={false}
-            editable={!isGenerating && !isRecording}
+            editable={!isGenerating}
             placeholderTextColor="#999"
             textAlignVertical="top"
             numberOfLines={3}
@@ -1299,39 +1170,16 @@ const ChatScreen = ({ route, navigation }: Props) => {
               Stop
             </ButtonWithAnimation>
           ) : (
-            <View style={styles.buttonRow}>
-              <ButtonWithAnimation
-                onPress={toggleRecording}  
-                style={[
-                  styles.micButton,
-                  isRecording && styles.stopButton // turn red while recording
-                ]}
-                isIcon={true}
-              >
-                {isRecording ? (
-                  <View style={styles.stopIconContainer}>
-                    <View style={styles.stopIcon} />
-                  </View>
-                ) : (
-                  <Image
-                    source={require('../../assets/justtalkorvent.png')}
-                    style={styles.micIcon}
-                    resizeMode="contain"
-                  />
-                )}
-              </ButtonWithAnimation>
-
-              <ButtonWithAnimation
-                onPress={handleSendMessage}
-                style={[
-                  styles.sendButton,
-                  (!userInput.trim() || !context) && styles.sendButtonDisabled
-                ]}
-                textStyle={{}}
-              >
-                Send
-              </ButtonWithAnimation>
-            </View>
+            <ButtonWithAnimation
+              onPress={handleSendMessage}
+              style={[
+                styles.sendButton,
+                (!userInput.trim() || !context) && styles.sendButtonDisabled
+              ]}
+              textStyle={{}}
+            >
+              Send
+            </ButtonWithAnimation>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -1594,7 +1442,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     backgroundColor: COLORS.primary,
-    width: Math.min(40, width * 0.1),
+    width: Math.min(60, width * 0.15),
     height: Math.min(40, width * 0.1),
     shadowOpacity: 0.25,
     borderBottomWidth: 2,
@@ -1606,7 +1454,7 @@ const styles = StyleSheet.create({
   },
   stopButton: {
     backgroundColor: '#FF3B30',
-    width: Math.min(40, width * 0.1),
+    width: Math.min(60, width * 0.15),
     height: Math.min(40, width * 0.1),
     shadowOpacity: 0.3,
     shadowColor: '#FF3B30',
@@ -1619,7 +1467,8 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: COLORS.primary,
-    shadowOpacity: 0.4,
+    opacity: 0.7,
+    shadowOpacity: 0.2,
   },
   sendButtonText: {
     color: '#FFFFFF',
@@ -1682,48 +1531,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  micButton: {
-    backgroundColor: COLORS.primary,
-    width: Math.min(40, width * 0.1),
-    height: Math.min(40, width * 0.1),
-    shadowOpacity: 0.25,
-    borderBottomWidth: 2,
-    borderRightWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
-    borderRightColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  micIcon: {
-    width: Math.min(20, width * 0.05),
-    height: Math.min(20, width * 0.05),
-    tintColor: '#FFFFFF',
-  },
-  stopIconContainer: {
-    width: Math.min(20, width * 0.05),
-    height: Math.min(20, width * 0.05),
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stopIcon: {
-    width: Math.min(12, width * 0.03),
-    height: Math.min(12, width * 0.03),
-    backgroundColor: '#FFFFFF',
-    borderRadius: 2,
-  },
-  waveformContainer: {
-    position: 'absolute',
-    top: -40,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  floatingRecordingIndicator: {
-    position: 'absolute',
-    bottom: 80, // Place it closer to the chat section
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 100,
   },
 });
 
