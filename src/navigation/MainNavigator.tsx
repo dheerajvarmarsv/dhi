@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 // Auth Screens
@@ -9,6 +9,7 @@ import PhoneNumberScreen from '../screens/auth/PhoneNumberScreen';
 // Main Content
 import ModelSelectionScreen from '../screens/ModelSelectionScreen';
 import ChatScreen from '../screens/ChatScreen';
+import RemindersScreen from '../screens/RemindersScreen';
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -16,6 +17,7 @@ export type RootStackParamList = {
   PhoneNumber: undefined;
   ModelSelection: undefined;
   Chat: { selectedModel: string; chatId?: string };
+  Reminders: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -37,6 +39,7 @@ const MainNavigator = () => {
       {/* Main Flow */}
       <Stack.Screen name="ModelSelection" component={ModelSelectionScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="Reminders" component={RemindersScreen} />
     </Stack.Navigator>
   );
 };

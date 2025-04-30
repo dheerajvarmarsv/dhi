@@ -1,17 +1,25 @@
-export type Message = {
+export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   thought?: string;
   showThought?: boolean;
-  timestamp?: number;
-};
+}
 
-export type ChatSession = {
+export interface ChatSession {
   id: string;
-  modelId: string;
   title: string;
-  lastMessage: string;
-  timestamp: number;
+  model: string;
   messages: Message[];
-  personaId?: string; // Persona/template ID used for this chat
-}; 
+  createdAt: number;
+  updatedAt: number;
+  personaId?: string;
+}
+
+export interface Reminder {
+  id: string;
+  text: string;
+  timestamp: number;
+  chatId?: string;
+  createdAt: number;
+  isCompleted: boolean;
+} 

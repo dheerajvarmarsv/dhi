@@ -34,6 +34,11 @@ import PersonaSelector from '../components/PersonaSelector';
 import ChatSidebar from '../components/ChatSidebar';
 import { Message, ChatSession } from '../types';
 import { COLORS, FONTS } from '../constants/theme';
+import ReminderDialog from '../components/ReminderDialog';
+import ReminderButton from '../components/ReminderButton';
+import { useReminderDetection } from '../hooks/useReminderDetection';
+import { getActiveReminders, setupReminderSystem } from '../utils/reminderUtils';
+import { processAssistantMessageForReminder } from '../utils/reminderIntegration';
 
 // Get device dimensions for responsive design
 const { width, height } = Dimensions.get('window');
@@ -75,6 +80,9 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const titleInputRef = useRef<TextInput>(null);
 
   const [inputHeight, setInputHeight] = useState(45);
+  const [reminderDialogVisible, setReminderDialogVisible] = useState(false);
+  const [activeReminderCount, setActiveReminderCount] = useState(0);
+  const { hasReminderIntent, reminderMessage, clearReminderIntent } = useReminderDetection(userInput);
 
   // Load the model and chat when component mounts
   useEffect(() => {
@@ -90,6 +98,27 @@ const ChatScreen = ({ route, navigation }: Props) => {
       }
     };
   }, [selectedModel]);
+  
+  // Initialize reminder system and check for active reminders
+  useEffect(() => {
+    // Initialize reminder system
+    setupReminderSystem();
+    
+    // Check for active reminders periodically
+    const checkReminders = async () => {
+      try {
+        const activeReminders = await getActiveReminders();
+        setActiveReminderCount(activeReminders.length);
+      } catch (error) {
+        console.error('Error checking reminders:', error);
+      }
+    };
+    
+    checkReminders();
+    const interval = setInterval(checkReminders, 60000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, []);
   
   const cleanupDuplicateNewChats = async () => {
     try {
@@ -319,6 +348,12 @@ const ChatScreen = ({ route, navigation }: Props) => {
   };
 
   const handleSendMessage = async () => {
+    // If message has reminder intent, show reminder dialog
+    if (hasReminderIntent) {
+      setReminderDialogVisible(true);
+      return;
+    }
+    
     if (!context) {
       Alert.alert('Model Not Loaded', 'Please wait for the model to load.');
       return;
@@ -516,6 +551,36 @@ const ChatScreen = ({ route, navigation }: Props) => {
       
       // Save chat after completion to maintain context between sessions
       await saveChat();
+      
+      // After message is complete, check if it contains a reminder confirmation
+      try {
+        const lastMessage = updatedConversation[updatedConversation.length - 1];
+        if (lastMessage && lastMessage.role === 'assistant') {
+          const { reminderCreated, confirmationMessage } = await processAssistantMessageForReminder(
+            lastMessage, 
+            currentChatId || undefined
+          );
+          
+          // If a reminder was created automatically, update the active reminder count
+          if (reminderCreated) {
+            const activeReminders = await getActiveReminders();
+            setActiveReminderCount(activeReminders.length);
+            
+            // Optionally add a system message confirming the reminder was set
+            if (confirmationMessage) {
+              setConversation((prev) => [
+                ...prev,
+                {
+                  role: 'system',
+                  content: confirmationMessage,
+                },
+              ]);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing message for reminders:', error);
+      }
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -982,6 +1047,51 @@ const ChatScreen = ({ route, navigation }: Props) => {
     return iconMap[iconPath] || require('../../assets/understand.png');
   };
 
+  const handleNavigateToChat = (id: string) => {
+    navigation.navigate('Chat', { selectedModel, chatId: id });
+  };
+  
+  const handleReminderSet = async (reminderTime: Date, reminderText: string) => {
+    // Clear the reminder intent
+    clearReminderIntent();
+    
+    // Reset user input
+    setUserInput('');
+    
+    // Update the active reminder count
+    const activeReminders = await getActiveReminders();
+    setActiveReminderCount(activeReminders.length);
+    
+    // Add confirmation message to conversation
+    const timeFormatted = reminderTime.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    const dateFormatted = reminderTime.toLocaleDateString([], { 
+      month: 'short', 
+      day: 'numeric',
+      year: reminderTime.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+    });
+    
+    const confirmationMessage = `I've set a reminder for "${reminderText}" on ${dateFormatted} at ${timeFormatted}.`;
+    
+    setConversation((prev) => [
+      ...prev,
+      {
+        role: 'system',
+        content: confirmationMessage,
+      },
+    ]);
+    
+    // Save the updated conversation
+    await saveChat();
+  };
+  
+  const handleShowReminders = () => {
+    navigation.navigate('Reminders' as any);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -1033,6 +1143,11 @@ const ChatScreen = ({ route, navigation }: Props) => {
           </View>
 
           <View style={styles.headerRight}>
+            <ReminderButton
+              onPress={handleShowReminders}
+              count={activeReminderCount}
+            />
+            <View style={styles.headerButtonSpacer} />
             <ButtonWithAnimation
               onPress={clearChat}
               style={styles.clearChatButton}
@@ -1189,6 +1304,18 @@ const ChatScreen = ({ route, navigation }: Props) => {
         onClose={() => setPersonaSelectorVisible(false)}
         selectedPersonaId={selectedPersonaId}
         onSelectPersona={handlePersonaChange}
+      />
+      
+      {/* Reminder Dialog */}
+      <ReminderDialog
+        visible={reminderDialogVisible}
+        onClose={() => {
+          setReminderDialogVisible(false);
+          clearReminderIntent();
+        }}
+        reminderText={reminderMessage}
+        chatId={currentChatId || undefined}
+        onReminderSet={handleReminderSet}
       />
     </SafeAreaView>
   );
@@ -1531,6 +1658,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  headerButtonSpacer: {
+    width: Math.min(16, width * 0.04),
   },
 });
 

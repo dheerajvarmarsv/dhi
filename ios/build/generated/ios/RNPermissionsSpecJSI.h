@@ -68,6 +68,7 @@ protected:
 
 public:
   virtual jsi::Value canScheduleExactAlarms(jsi::Runtime &rt) = 0;
+  virtual jsi::Value canUseFullScreenIntent(jsi::Runtime &rt) = 0;
   virtual jsi::Value check(jsi::Runtime &rt, jsi::String permission) = 0;
   virtual jsi::Value checkLocationAccuracy(jsi::Runtime &rt) = 0;
   virtual jsi::Value checkMultiple(jsi::Runtime &rt, jsi::Array permissions) = 0;
@@ -116,6 +117,14 @@ private:
 
       return bridging::callFromJs<jsi::Value>(
           rt, &T::canScheduleExactAlarms, jsInvoker_, instance_);
+    }
+    jsi::Value canUseFullScreenIntent(jsi::Runtime &rt) override {
+      static_assert(
+          bridging::getParameterCount(&T::canUseFullScreenIntent) == 1,
+          "Expected canUseFullScreenIntent(...) to have 1 parameters");
+
+      return bridging::callFromJs<jsi::Value>(
+          rt, &T::canUseFullScreenIntent, jsInvoker_, instance_);
     }
     jsi::Value check(jsi::Runtime &rt, jsi::String permission) override {
       static_assert(

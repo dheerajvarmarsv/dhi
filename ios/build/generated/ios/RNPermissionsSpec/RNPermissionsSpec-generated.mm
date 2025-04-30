@@ -30,6 +30,10 @@ namespace facebook::react {
       return static_cast<ObjCTurboModule&>(turboModule).invokeObjCMethod(rt, PromiseKind, "canScheduleExactAlarms", @selector(canScheduleExactAlarms:reject:), args, count);
     }
 
+    static facebook::jsi::Value __hostFunction_NativeRNPermissionsSpecJSI_canUseFullScreenIntent(facebook::jsi::Runtime& rt, TurboModule &turboModule, const facebook::jsi::Value* args, size_t count) {
+      return static_cast<ObjCTurboModule&>(turboModule).invokeObjCMethod(rt, PromiseKind, "canUseFullScreenIntent", @selector(canUseFullScreenIntent:reject:), args, count);
+    }
+
     static facebook::jsi::Value __hostFunction_NativeRNPermissionsSpecJSI_check(facebook::jsi::Runtime& rt, TurboModule &turboModule, const facebook::jsi::Value* args, size_t count) {
       return static_cast<ObjCTurboModule&>(turboModule).invokeObjCMethod(rt, PromiseKind, "check", @selector(check:resolve:reject:), args, count);
     }
@@ -78,6 +82,9 @@ namespace facebook::react {
     : ObjCTurboModule(params) {
       
         methodMap_["canScheduleExactAlarms"] = MethodMetadata {0, __hostFunction_NativeRNPermissionsSpecJSI_canScheduleExactAlarms};
+        
+        
+        methodMap_["canUseFullScreenIntent"] = MethodMetadata {0, __hostFunction_NativeRNPermissionsSpecJSI_canUseFullScreenIntent};
         
         
         methodMap_["check"] = MethodMetadata {1, __hostFunction_NativeRNPermissionsSpecJSI_check};

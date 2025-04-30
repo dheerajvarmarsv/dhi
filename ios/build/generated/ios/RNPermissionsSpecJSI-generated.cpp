@@ -16,6 +16,11 @@ static jsi::Value __hostFunction_NativeRNPermissionsCxxSpecJSI_canScheduleExactA
     rt
   );
 }
+static jsi::Value __hostFunction_NativeRNPermissionsCxxSpecJSI_canUseFullScreenIntent(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
+  return static_cast<NativeRNPermissionsCxxSpecJSI *>(&turboModule)->canUseFullScreenIntent(
+    rt
+  );
+}
 static jsi::Value __hostFunction_NativeRNPermissionsCxxSpecJSI_check(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
   return static_cast<NativeRNPermissionsCxxSpecJSI *>(&turboModule)->check(
     rt,
@@ -83,6 +88,7 @@ static jsi::Value __hostFunction_NativeRNPermissionsCxxSpecJSI_shouldShowRequest
 NativeRNPermissionsCxxSpecJSI::NativeRNPermissionsCxxSpecJSI(std::shared_ptr<CallInvoker> jsInvoker)
   : TurboModule("RNPermissions", jsInvoker) {
   methodMap_["canScheduleExactAlarms"] = MethodMetadata {0, __hostFunction_NativeRNPermissionsCxxSpecJSI_canScheduleExactAlarms};
+  methodMap_["canUseFullScreenIntent"] = MethodMetadata {0, __hostFunction_NativeRNPermissionsCxxSpecJSI_canUseFullScreenIntent};
   methodMap_["check"] = MethodMetadata {1, __hostFunction_NativeRNPermissionsCxxSpecJSI_check};
   methodMap_["checkLocationAccuracy"] = MethodMetadata {0, __hostFunction_NativeRNPermissionsCxxSpecJSI_checkLocationAccuracy};
   methodMap_["checkMultiple"] = MethodMetadata {1, __hostFunction_NativeRNPermissionsCxxSpecJSI_checkMultiple};

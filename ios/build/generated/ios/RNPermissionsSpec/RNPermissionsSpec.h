@@ -37,6 +37,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)canScheduleExactAlarms:(RCTPromiseResolveBlock)resolve
                         reject:(RCTPromiseRejectBlock)reject;
+- (void)canUseFullScreenIntent:(RCTPromiseResolveBlock)resolve
+                        reject:(RCTPromiseRejectBlock)reject;
 - (void)check:(NSString *)permission
       resolve:(RCTPromiseResolveBlock)resolve
        reject:(RCTPromiseRejectBlock)reject;
