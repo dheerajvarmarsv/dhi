@@ -33,6 +33,10 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Dhi needs access to your microphone so you can speak commands.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Dhi uses speech recognition to understand what you say and respond.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need to access your photo library so you can pick images.</string>
 	<key>UIBackgroundModes</key>
