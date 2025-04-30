@@ -15,10 +15,12 @@ import {
   Animated,
   Easing,
   Platform,
+  Alert,
 } from 'react-native';
 import { COLORS, FONTS, SIZES } from '../../constants/theme';
 import BubblesScreen from '../../components/BubblesScreen';
 import { isModelDownloaded, MODEL_FILENAME } from '../../utils/modelUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -54,6 +56,7 @@ interface OnboardingScreenProps {
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isChecking, setIsChecking] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
   
   // Animation values
@@ -76,6 +79,55 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
     "FOR YOU"
   ];
   
+  // Check if user has opened the app before
+  useEffect(() => {
+    const checkPreviousLaunch = async () => {
+      try {
+        // Test AsyncStorage functionality
+        await AsyncStorage.setItem('_test_key', 'test_value');
+        const testValue = await AsyncStorage.getItem('_test_key');
+        if (testValue !== 'test_value') {
+          throw new Error('AsyncStorage test failed');
+        }
+        
+        const hasOpenedApp = await AsyncStorage.getItem('hasOpenedApp');
+        const lastModel = await AsyncStorage.getItem('lastModel');
+        const lastChatId = await AsyncStorage.getItem('lastChatId');
+        
+        // If the user has opened the app before and we have their last session
+        if (hasOpenedApp === 'true' && lastModel) {
+          const modelExists = await isModelDownloaded();
+          
+          if (modelExists) {
+            // Skip onboarding and navigate to last chat or model selection
+            if (lastChatId) {
+              navigation.navigate('Chat', { 
+                selectedModel: lastModel,
+                chatId: lastChatId
+              });
+            } else {
+              navigation.navigate('Chat', { selectedModel: lastModel });
+            }
+            return;
+          }
+        }
+        
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error checking previous launch:', error);
+        // Clear any potentially corrupt AsyncStorage data
+        try {
+          await AsyncStorage.clear();
+        } catch (clearError) {
+          console.error('Error clearing AsyncStorage:', clearError);
+        }
+        setIsLoading(false);
+      }
+    };
+    
+    checkPreviousLaunch();
+  }, [navigation]);
+
   useEffect(() => {
     // Start animations when component mounts
     Animated.parallel([
@@ -199,7 +251,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
     return () => {
       clearTimeout(textAnimationTimeout);
     };
-  }, []);
+  }, [fadeAnim, scaleAnim, floatAnim, pulseAnim, rotateAnim, glowAnim, textFadeAnim]);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -268,10 +320,33 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
   const handleGetStarted = async () => {
     setIsChecking(true);
     try {
+      // Test AsyncStorage is working before using it
+      try {
+        await AsyncStorage.setItem('_test_key', 'test_value');
+        const testValue = await AsyncStorage.getItem('_test_key');
+        if (testValue !== 'test_value') {
+          throw new Error('AsyncStorage not working properly');
+        }
+        
+        // Set that user has opened the app before
+        await AsyncStorage.setItem('hasOpenedApp', 'true');
+      } catch (storageError) {
+        console.error('AsyncStorage error:', storageError);
+        // Continue without AsyncStorage if it fails
+      }
+      
       const modelExists = await isModelDownloaded();
       setIsChecking(false);
       
       if (modelExists) {
+        try {
+          // Save the model information for future reference
+          await AsyncStorage.setItem('lastModel', MODEL_FILENAME);
+        } catch (storageError) {
+          console.error('AsyncStorage error while saving model:', storageError);
+          // Continue without saving if it fails
+        }
+        
         // Navigate to Chat screen with the model filename
         navigation.navigate('Chat', { 
           selectedModel: MODEL_FILENAME,
@@ -282,8 +357,13 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
         navigation.navigate('ModelSelection');
       }
     } catch (error) {
+      console.error('Error in handleGetStarted:', error);
       setIsChecking(false);
-      navigation.navigate('ModelSelection');
+      Alert.alert(
+        'Error',
+        'There was a problem starting the app. Please try again.',
+        [{ text: 'OK', onPress: () => navigation.navigate('ModelSelection') }]
+      );
     }
   };
   
@@ -309,6 +389,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
     inputRange: [0, 1],
     outputRange: [0.1, 0.25],
   });
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -622,6 +710,10 @@ const styles = StyleSheet.create({
     fontSize: Math.min(18, width * 0.045),
     fontWeight: '600',
     textAlign: 'center',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

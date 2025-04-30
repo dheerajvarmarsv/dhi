@@ -16,6 +16,7 @@ import {
   Pressable,
   StatusBar,
   Image,
+  AppState,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { initLlama, releaseAllLlama } from 'llama.rn';
@@ -83,6 +84,9 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const [reminderDialogVisible, setReminderDialogVisible] = useState(false);
   const [activeReminderCount, setActiveReminderCount] = useState(0);
   const { hasReminderIntent, reminderMessage, clearReminderIntent } = useReminderDetection(userInput);
+
+  // Add an appState ref to track app state changes
+  const appStateRef = useRef(AppState.currentState);
 
   // Load the model and chat when component mounts
   useEffect(() => {
@@ -203,6 +207,11 @@ const ChatScreen = ({ route, navigation }: Props) => {
         
         // Update navigation params without triggering a navigation
         navigation.setParams({ chatId: id });
+        
+        // Scroll to the end after loading the chat
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 200);
       } else {
         // If chat doesn't exist, look for an existing "New Chat" first
         const existingChats = await getChatsByModel(selectedModel);
@@ -327,16 +336,56 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   };
 
+  // Add this useEffect to handle app state changes and scrolling
+  useEffect(() => {
+    // Function to scroll to the end of the chat
+    const scrollToEnd = () => {
+      if (scrollViewRef.current && conversation.length > 1) {
+        // Use setTimeout to ensure the scrollview has rendered
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 100);
+      }
+    };
+
+    // Scroll to the end on initial render
+    scrollToEnd();
+
+    // Handle app state changes
+    const handleAppStateChange = (nextAppState: any) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground - scroll to the end
+        scrollToEnd();
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    // Subscribe to app state changes
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Clean up on unmount
+    return () => {
+      subscription.remove();
+    };
+  }, [conversation]);
+
+  // Modify the handleScroll function to keep track of the scroll position
   const handleScroll = (event: any) => {
-    const currentPosition = event.nativeEvent.contentOffset.y;
     const contentHeight = event.nativeEvent.contentSize.height;
-    const scrollViewHeight = event.nativeEvent.layoutMeasurement.height;
-
-    scrollPositionRef.current = currentPosition;
+    const layoutHeight = event.nativeEvent.layoutMeasurement.height;
+    const scrollY = event.nativeEvent.contentOffset.y;
+    
+    scrollPositionRef.current = scrollY;
     contentHeightRef.current = contentHeight;
-
-    const distanceFromBottom = contentHeight - scrollViewHeight - currentPosition;
-    setAutoScrollEnabled(distanceFromBottom < 100);
+    
+    // Determine if user is close to the bottom
+    const isCloseToBottom = contentHeight - scrollY - layoutHeight < 100;
+    if (isCloseToBottom !== autoScrollEnabled) {
+      setAutoScrollEnabled(isCloseToBottom);
+    }
   };
 
   const toggleThought = (messageIndex: number) => {
@@ -1357,6 +1406,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
             placeholderTextColor="#999"
             textAlignVertical="top"
             numberOfLines={3}
+            keyboardType="default"
+            autoFocus={false}
+            blurOnSubmit={false}
+            onFocus={() => setAutoScrollEnabled(true)}
           />
           
           {isGenerating ? (

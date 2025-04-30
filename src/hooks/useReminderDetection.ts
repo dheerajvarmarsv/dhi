@@ -53,6 +53,19 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
       /\blet me know when\b/i,
       /\bnotify me\b/i,
       /\balert me\b/i,
+      /\bremind (?:me|us)\b/i,              // More general "remind me" pattern
+      /\bhelp me remember\b/i,              // "Help me remember to..."
+      /\bwake me\b/i,                       // Wake me at/in/when...
+      /\bping me\b/i,                       // Ping me at/in/when...
+      /\btell me (?:when|to|about)\b/i,     // "Tell me when/to/about..."
+      /\bneed to remember\b/i,              // "I need to remember to..."
+      /\bwant to remember\b/i,              // "I want to remember to..."
+      /\bhave to remember\b/i,              // "I have to remember to..."
+      /\bmake sure I\b.*?\b(?:don't forget|remember)\b/i, // "Make sure I don't forget"
+      /\bremember\b.*?\bat\b/i,             // "Remember to X at Y time"
+      /\bremember\b.*?\bin\b/i,             // "Remember to X in Y time"
+      /\breminder\b.*?\bin\b/i,             // "Reminder to X in Y time"
+      /\bremind\s+(?:me|us)?\s+(?:in|at)\s+\d+/i, // "Remind in X" or "Remind at X"
     ];
     
     // If any direct pattern matches, this is almost certainly a reminder request
@@ -85,7 +98,7 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
     // 3. For ambiguous cases, check if the intent structure matches a reminder
     // This requires BOTH a time reference AND an action/reminder context
     
-    // Time reference patterns
+    // Time reference patterns - expanded for more natural language
     const timePatterns = [
       /\bin \d+ min(?:ute)?s?\b/i,     // "in X minutes"
       /\bin \d+ hour(?:s)?\b/i,        // "in X hours"
@@ -95,12 +108,21 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
       /\btoday at\b/i,                // "today at X"
       /\btomorrow\b/i,                // "tomorrow" 
       /\blater\b/i,                   // "later today/tonight"
+      /\b\d+\s*min(?:ute)?s?\b/i,     // Just "X minutes" without "in"
+      /\b\d+\s*hour(?:s)?\b/i,        // Just "X hours" without "in"
+      /\bthis (?:evening|afternoon|morning)\b/i, // Time periods
+      /\btonight\b/i,                 // Tonight
+      /\bnext week\b/i,               // Next week
+      /\bon (?:mon|tues|wednes|thurs|fri|satur|sun)day\b/i, // On specific day
+      /\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b/i, // Just day name
+      /\bin the (?:morning|afternoon|evening)\b/i, // General time of day
     ];
     
     // Action/intent context patterns that suggest this is actually a reminder
     const actionIntentPatterns = [
       /\b(?:to|that I should|that I need to)\b/i, // Purpose of reminder
-      /\b(?:call|text|email|check|do|make|get|buy|pick up|meet|send|take|go to)\b/i, // Common actions
+      /\b(?:call|text|email|check|do|make|get|buy|pick up|meet|send|take|go to|attend|join|finish|complete|pay|submit|work on)\b/i, // Common actions
+      /\b(?:appointment|meeting|call|deadline|due date|assignment|task|chore|errand|medication|pills|order|reservation|booking|flight|train|bus|event|party|birthday|anniversary|payment|bill|subscription|workout|exercise|class)\b/i, // Common reminder topics
     ];
     
     const hasTimeReference = timePatterns.some(pattern => pattern.test(input));
@@ -115,8 +137,27 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
     // Direct mentions of minutes that look like reminder requests
     // e.g. "5 mins" or "remind in 5 mins"
     if (/\b\d+\s*mins?\b/i.test(input) && 
-        (input.includes("remind") || input.includes("reminder") || input.includes("alert"))) {
+        (input.includes("remind") || input.includes("reminder") || input.includes("alert") || 
+         input.includes("notification") || input.includes("notify"))) {
       return true;
+    }
+    
+    // Improved detection for "X minutes" style requests without explicit reminder words
+    if (/\b\d+\s*mins?\b/i.test(input) && input.length < 30) {
+      // Short inputs with just time specifications are likely reminder requests
+      // e.g. "15 minutes" or "5 mins"
+      return true;
+    }
+    
+    // Check for just time patterns at the beginning of short messages
+    // E.g. "Tomorrow at 3pm dentist appointment"
+    if (input.length < 50) {
+      for (const pattern of timePatterns) {
+        if (pattern.test(input.substring(0, Math.min(20, input.length)))) {
+          // Time reference at the beginning of message, likely a reminder
+          return true;
+        }
+      }
     }
     
     // Default to false for anything else - be conservative to avoid false positives
@@ -176,7 +217,24 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
         setReminderMessage(extractionResult.message);
         setExtractedTime(extractionResult.time);
       } else {
-        setReminderMessage(correctedInput.trim());
+        // For cases where we detected intent but couldn't extract a structured reminder,
+        // try to clean up the text by removing common reminder request phrases
+        let cleanedText = correctedInput
+          .replace(/remind me to/gi, '')
+          .replace(/remind me about/gi, '')
+          .replace(/remind me that/gi, '')
+          .replace(/remind me/gi, '')
+          .replace(/set a reminder to/gi, '')
+          .replace(/set a reminder for/gi, '')
+          .replace(/set a reminder/gi, '')
+          .replace(/create a reminder to/gi, '')
+          .replace(/create a reminder for/gi, '')
+          .replace(/create a reminder/gi, '')
+          .replace(/don't let me forget to/gi, '')
+          .replace(/don't let me forget/gi, '')
+          .trim();
+          
+        setReminderMessage(cleanedText);
         
         // If no time from the extractor, try to extract it manually
         const timeResult = extractTimeFromText(correctedInput);

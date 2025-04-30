@@ -19,7 +19,7 @@ import {
   FlatList,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { COLORS, FONTS, SHADOWS } from '../constants/theme';
+import { COLORS, FONTS } from '../constants/theme';
 import { 
   extractReminderFromText, 
   addReminder, 
@@ -33,7 +33,41 @@ import moment from 'moment';
 
 const { width, height } = Dimensions.get('window');
 
-// Add enhanced time extraction function for better detection
+// Add SHADOWS constant if not already defined in theme
+const SHADOWS = {
+  tiny: {
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 1.0,
+    elevation: 1,
+  },
+  small: {
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.23,
+    shadowRadius: 2.62,
+    elevation: 3,
+  },
+  medium: {
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.30,
+    shadowRadius: 4.65,
+    elevation: 6,
+  },
+};
+
+// Replace the existing enhancedExtractTimeFromText function with this improved version
 const enhancedExtractTimeFromText = (text: string): Date => {
   // First try the existing extraction
   const extractionResult = extractReminderFromText(text);
@@ -47,21 +81,147 @@ const enhancedExtractTimeFromText = (text: string): Date => {
     return time;
   }
   
-  // Fallback for simple cases: X min/minutes/mins
+  // Check for specific time patterns with better handling
+  const now = new Date();
+  
+  // Fallback for minutes
   const minutesMatch = text.match(/(\d+)\s*(min|mins|minutes)/i);
   if (minutesMatch) {
     const minutes = parseInt(minutesMatch[1], 10);
     return new Date(Date.now() + minutes * 60 * 1000);
   }
   
-  // Fallback for simple cases: X hour/hours
+  // Fallback for hours
   const hoursMatch = text.match(/(\d+)\s*(hour|hours|hr|hrs)/i);
   if (hoursMatch) {
     const hours = parseInt(hoursMatch[1], 10);
     return new Date(Date.now() + hours * 60 * 60 * 1000);
   }
   
-  // Default to current time + 5 minutes if nothing detected
+  // Fallback for days
+  const daysMatch = text.match(/(\d+)\s*(day|days)/i);
+  if (daysMatch) {
+    const days = parseInt(daysMatch[1], 10);
+    const result = new Date(now);
+    result.setDate(result.getDate() + days);
+    return result;
+  }
+  
+  // Check for "tomorrow" pattern
+  if (text.match(/\btomorrow\b/i)) {
+    // Check if there's a specific time mentioned with tomorrow
+    const tomorrowTimeMatch = text.match(/tomorrow\s+(?:at)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    
+    if (tomorrowTimeMatch) {
+      let hours = parseInt(tomorrowTimeMatch[1], 10);
+      const minutes = tomorrowTimeMatch[2] ? parseInt(tomorrowTimeMatch[2], 10) : 0;
+      const ampm = tomorrowTimeMatch[3]?.toLowerCase();
+      
+      // Handle AM/PM conversion
+      if (ampm === 'pm' && hours < 12) {
+        hours += 12;
+      } else if (ampm === 'am' && hours === 12) {
+        hours = 0;
+      }
+      
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(hours, minutes, 0, 0);
+      
+      return tomorrow;
+    } else {
+      // Default to 9 AM tomorrow if no specific time mentioned
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
+      return tomorrow;
+    }
+  }
+  
+  // Check for "tonight" pattern
+  if (text.match(/\btonight\b/i)) {
+    const tonight = new Date();
+    tonight.setHours(20, 0, 0, 0);
+    return tonight;
+  }
+  
+  // Check for "this afternoon" pattern
+  if (text.match(/\bthis afternoon\b/i)) {
+    const afternoon = new Date();
+    afternoon.setHours(14, 0, 0, 0);
+    return afternoon;
+  }
+  
+  // Check for "this evening" pattern
+  if (text.match(/\bthis evening\b/i)) {
+    const evening = new Date();
+    evening.setHours(18, 0, 0, 0);
+    return evening;
+  }
+  
+  // Check for "this morning" pattern
+  if (text.match(/\bthis morning\b/i)) {
+    const morning = new Date();
+    if (morning.getHours() >= 12) {
+      // If it's already past noon, schedule for tomorrow morning
+      morning.setDate(morning.getDate() + 1);
+    }
+    morning.setHours(9, 0, 0, 0);
+    return morning;
+  }
+  
+  // Check for day of week
+  const dayOfWeekMatch = text.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+  if (dayOfWeekMatch) {
+    const dayName = dayOfWeekMatch[1].toLowerCase();
+    const daysMap: {[key: string]: number} = {
+      'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+      'thursday': 4, 'friday': 5, 'saturday': 6
+    };
+    
+    const targetDay = daysMap[dayName];
+    const today = now.getDay();
+    let daysToAdd = targetDay - today;
+    
+    // If the target day is today or already passed this week, schedule for next week
+    if (daysToAdd <= 0) {
+      daysToAdd += 7;
+    }
+    
+    const result = new Date(now);
+    result.setDate(result.getDate() + daysToAdd);
+    
+    // Default to 9 AM on the target day
+    result.setHours(9, 0, 0, 0);
+    return result;
+  }
+  
+  // Check for specific time today (e.g., "at 3pm")
+  const timeMatch = text.match(/\bat\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1], 10);
+    const minutes = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+    const ampm = timeMatch[3].toLowerCase();
+    
+    // Handle AM/PM conversion
+    if (ampm === 'pm' && hours < 12) {
+      hours += 12;
+    } else if (ampm === 'am' && hours === 12) {
+      hours = 0;
+    }
+    
+    const result = new Date();
+    result.setHours(hours, minutes, 0, 0);
+    
+    // If the time has already passed today, schedule for tomorrow
+    if (result <= now) {
+      result.setDate(result.getDate() + 1);
+    }
+    
+    return result;
+  }
+  
+  // Default to 5 minutes from now if nothing else matches
   return new Date(Date.now() + 5 * 60 * 1000);
 };
 
@@ -416,58 +576,88 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                 </TouchableOpacity>
               </View>
               
-              <ScrollView contentContainerStyle={styles.content}>
-                <Text style={styles.label}>What to remember?</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={text}
-                  onChangeText={setText}
-                  placeholder="Enter reminder text"
-                  multiline
-                  numberOfLines={2}
-                  placeholderTextColor="#999"
-                />
+              <ScrollView 
+                contentContainerStyle={styles.content}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.label}>What to remember?</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={text}
+                    onChangeText={setText}
+                    placeholder="Enter reminder text"
+                    multiline
+                    numberOfLines={2}
+                    placeholderTextColor="#999"
+                  />
+                </View>
                 
-                <Text style={styles.label}>When?</Text>
-                <TouchableOpacity style={styles.dateSelector} onPress={handleCustomTime}>
-                  <Text style={styles.dateText}>{formattedDate}</Text>
-                </TouchableOpacity>
-                
-                {/* Date picker section */}
-                {(showDatePicker || Platform.OS === 'ios') && (
-                  <View>
-                    <DateTimePicker
-                      value={date}
-                      mode="datetime"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={handleDateChange}
-                      minimumDate={new Date()}
-                      style={Platform.OS === 'ios' ? styles.datePicker : undefined}
-                    />
-                  </View>
-                )}
-                
-                <Text style={styles.quickSelectLabel}>Quick select:</Text>
-                <View style={styles.timeOptionsContainer}>
-                  {timeOptions.map((option, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.timeOption,
-                        moment(date).isSame(moment(option.value)) && styles.timeOptionSelected,
-                      ]}
-                      onPress={() => handleTimeOptionPress(option)}
-                    >
-                      <Text
-                        style={[
-                          styles.timeOptionText,
-                          moment(date).isSame(moment(option.value)) && styles.timeOptionTextSelected,
-                        ]}
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.label}>When?</Text>
+                  <View style={styles.datePickerOuterContainer}>
+                    {Platform.OS === 'ios' ? (
+                      <DateTimePicker
+                        value={date}
+                        mode="datetime"
+                        display="spinner"
+                        onChange={handleDateChange}
+                        minimumDate={new Date()}
+                        style={styles.iosDatePicker}
+                      />
+                    ) : (
+                      <TouchableOpacity 
+                        style={styles.dateSelector} 
+                        onPress={handleCustomTime}
+                        activeOpacity={0.7}
                       >
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <View style={styles.dateSelectorContent}>
+                          <View style={styles.calendarIconContainer}>
+                            <Text style={styles.calendarIcon}>📆</Text>
+                          </View>
+                          <Text style={styles.dateText}>{formattedDate}</Text>
+                        </View>
+                        <Text style={styles.editDateText}>Edit</Text>
+                      </TouchableOpacity>
+                    )}
+                    
+                    {/* Show DateTimePicker for Android when button is pressed */}
+                    {Platform.OS === 'android' && showDatePicker && (
+                      <DateTimePicker
+                        value={date}
+                        mode="datetime"
+                        display="default"
+                        onChange={handleDateChange}
+                        minimumDate={new Date()}
+                      />
+                    )}
+                  </View>
+                </View>
+                
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.quickSelectLabel}>Quick select:</Text>
+                  <View style={styles.timeOptionsContainer}>
+                    {timeOptions.map((option, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.timeOption,
+                          moment(date).isSame(moment(option.value)) && styles.timeOptionSelected,
+                        ]}
+                        onPress={() => handleTimeOptionPress(option)}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.timeOptionText,
+                            moment(date).isSame(moment(option.value)) && styles.timeOptionTextSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
 
                 <View style={styles.settingsSection}>
@@ -480,22 +670,33 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                     </View>
                     <View style={styles.prioritySelector}>
                       <TouchableOpacity 
-                        style={[styles.priorityOption, priority === 'low' && styles.prioritySelected]} 
+                        style={[
+                          styles.priorityOption, 
+                          priority === 'low' && styles.priorityLow,
+                          { borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }
+                        ]} 
                         onPress={() => setPriority('low')}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.priorityText}>Low</Text>
+                        <Text style={[styles.priorityText, priority === 'low' && styles.priorityTextSelected]}>Low</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
-                        style={[styles.priorityOption, priority === 'medium' && styles.prioritySelected]} 
+                        style={[styles.priorityOption, priority === 'medium' && styles.priorityMedium]} 
                         onPress={() => setPriority('medium')}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.priorityText}>Medium</Text>
+                        <Text style={[styles.priorityText, priority === 'medium' && styles.priorityTextSelected]}>Medium</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
-                        style={[styles.priorityOption, priority === 'high' && styles.prioritySelected]} 
+                        style={[
+                          styles.priorityOption, 
+                          priority === 'high' && styles.priorityHigh,
+                          { borderTopRightRadius: 8, borderBottomRightRadius: 8 }
+                        ]} 
                         onPress={() => setPriority('high')}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.priorityText}>High</Text>
+                        <Text style={[styles.priorityText, priority === 'high' && styles.priorityTextSelected]}>High</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -522,76 +723,51 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                     />
                   </View>
 
-                  {/* Advanced options toggle */}
+                  {/* Advanced options toggle with better styling */}
                   <TouchableOpacity 
                     style={styles.advancedOptionsToggle}
                     onPress={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                    activeOpacity={0.7}
                   >
                     <Text style={styles.advancedOptionsText}>
                       {showAdvancedOptions ? 'Hide advanced options' : 'Show advanced options'}
                     </Text>
-                    <Text style={styles.advancedOptionsIcon}>
-                      {showAdvancedOptions ? '▲' : '▼'}
-                    </Text>
+                    <View style={styles.advancedIconContainer}>
+                      <Text style={styles.advancedOptionsIcon}>
+                        {showAdvancedOptions ? '▲' : '▼'}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                   
-                  {/* Advanced options section */}
+                  {/* Advanced options section with improved layout */}
                   {showAdvancedOptions && (
-                    <View style={styles.advancedOptionsContainer}>
+                    <Animated.View style={styles.advancedOptionsContainer}>
                       {/* Recurrence options */}
                       <View style={styles.recurrenceSection}>
-                        <Text style={styles.sectionTitle}>Recurrence</Text>
+                        <Text style={styles.sectionTitle}>🔄 Recurrence</Text>
                         
                         <View style={styles.recurrenceOptions}>
-                          <TouchableOpacity
-                            style={[styles.recurrenceOption, repeating === 'none' && styles.recurrenceOptionSelected]}
-                            onPress={() => {
-                              setRepeating('none');
-                              setShowRecurrenceOptions(false);
-                            }}
-                          >
-                            <Text style={styles.recurrenceText}>None</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.recurrenceOption, repeating === 'daily' && styles.recurrenceOptionSelected]}
-                            onPress={() => {
-                              setRepeating('daily');
-                              setShowRecurrenceOptions(true);
-                            }}
-                          >
-                            <Text style={styles.recurrenceText}>Daily</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.recurrenceOption, repeating === 'weekly' && styles.recurrenceOptionSelected]}
-                            onPress={() => {
-                              setRepeating('weekly');
-                              setShowRecurrenceOptions(true);
-                            }}
-                          >
-                            <Text style={styles.recurrenceText}>Weekly</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.recurrenceOption, repeating === 'monthly' && styles.recurrenceOptionSelected]}
-                            onPress={() => {
-                              setRepeating('monthly');
-                              setShowRecurrenceOptions(true);
-                            }}
-                          >
-                            <Text style={styles.recurrenceText}>Monthly</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.recurrenceOption, repeating === 'custom' && styles.recurrenceOptionSelected]}
-                            onPress={() => {
-                              setRepeating('custom');
-                              setShowRecurrenceOptions(true);
-                            }}
-                          >
-                            <Text style={styles.recurrenceText}>Custom</Text>
-                          </TouchableOpacity>
+                          {['none', 'daily', 'weekly', 'monthly', 'custom'].map((type) => (
+                            <TouchableOpacity
+                              key={type}
+                              style={[
+                                styles.recurrenceOption, 
+                                repeating === type && styles.recurrenceOptionSelected
+                              ]}
+                              onPress={() => {
+                                setRepeating(type as any);
+                                setShowRecurrenceOptions(type !== 'none');
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[
+                                styles.recurrenceText, 
+                                repeating === type && styles.recurrenceTextSelected
+                              ]}>
+                                {type.charAt(0).toUpperCase() + type.slice(1)}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
                         </View>
                         
                         {/* Show details based on the selected recurrence type */}
@@ -649,6 +825,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                                         selectedDaysOfWeek.includes(day) && styles.dayOptionSelected,
                                       ]}
                                       onPress={() => toggleDayOfWeek(day)}
+                                      activeOpacity={0.7}
                                     >
                                       <Text
                                         style={[
@@ -706,17 +883,20 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                               </View>
                             )}
                             
-                            <Text style={styles.recurrenceSummary}>
-                              {getRecurrenceText()}
-                            </Text>
+                            <View style={styles.recurrenceSummaryContainer}>
+                              <Text style={styles.recurrenceSummaryLabel}>Summary:</Text>
+                              <Text style={styles.recurrenceSummary}>
+                                {getRecurrenceText()}
+                              </Text>
+                            </View>
                           </View>
                         )}
                       </View>
                       
-                      {/* To-do List Section */}
+                      {/* To-do List Section with improved UI */}
                       <View style={styles.todoSection}>
                         <View style={styles.todoHeaderRow}>
-                          <Text style={styles.sectionTitle}>To-do List</Text>
+                          <Text style={styles.sectionTitle}>📋 To-do List</Text>
                           <Switch
                             value={isTodoList}
                             onValueChange={setIsTodoList}
@@ -743,15 +923,19 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                                 onSubmitEditing={handleAddTodoItem}
                               />
                               <TouchableOpacity
-                                style={styles.addTodoButton}
+                                style={[
+                                  styles.addTodoButton,
+                                  !newTodoItem.trim() && styles.addTodoButtonDisabled
+                                ]}
                                 onPress={handleAddTodoItem}
                                 disabled={!newTodoItem.trim()}
+                                activeOpacity={0.7}
                               >
                                 <Text style={styles.addTodoButtonText}>+</Text>
                               </TouchableOpacity>
                             </View>
                             
-                            <View style={styles.todoList}>
+                            <View style={[styles.todoList, todoItems.length > 0 && styles.todoListWithItems]}>
                               {todoItems.length === 0 ? (
                                 <Text style={styles.emptyTodoText}>
                                   No items yet. Add some items above.
@@ -761,13 +945,14 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                                   data={todoItems}
                                   keyExtractor={item => item.id}
                                   renderItem={({ item }) => (
-                                    <View style={styles.todoItem}>
+                                    <Animated.View style={[styles.todoItem, { opacity: 1 }]}>
                                       <TouchableOpacity
                                         style={styles.todoCheckbox}
                                         onPress={() => handleToggleTodoItem(item.id)}
+                                        activeOpacity={0.7}
                                       >
                                         <View style={[
-                                          styles.checkbox,
+                                          styles.checkboxContainer,
                                           item.isCompleted && styles.checkboxChecked
                                         ]}>
                                           {item.isCompleted && (
@@ -786,19 +971,23 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                                       <TouchableOpacity
                                         style={styles.removeTodoButton}
                                         onPress={() => handleRemoveTodoItem(item.id)}
+                                        activeOpacity={0.7}
                                       >
                                         <Text style={styles.removeTodoButtonText}>×</Text>
                                       </TouchableOpacity>
-                                    </View>
+                                    </Animated.View>
                                   )}
                                   style={styles.todoListContent}
+                                  scrollEnabled={todoItems.length > 3}
+                                  showsVerticalScrollIndicator={false}
+                                  contentContainerStyle={styles.todoListContentContainer}
                                 />
                               )}
                             </View>
                           </View>
                         )}
                       </View>
-                    </View>
+                    </Animated.View>
                   )}
                 </View>
               </ScrollView>
@@ -807,14 +996,20 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                 <TouchableOpacity
                   style={[styles.button, styles.cancelButton]}
                   onPress={onClose}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={[styles.button, styles.setButton, !text.trim() && styles.disabledButton]}
+                  style={[
+                    styles.button, 
+                    styles.setButton, 
+                    !text.trim() && styles.disabledButton
+                  ]}
                   onPress={handleSetReminder}
                   disabled={!text.trim()}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.setButtonText}>
                     Set {getPriorityIcon()} Reminder
@@ -851,11 +1046,14 @@ const styles = StyleSheet.create({
   },
   dialogContainer: {
     width: width > 500 ? 450 : width * 0.92,
-    maxHeight: height * 0.8,
+    maxHeight: height * 0.85,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     overflow: 'hidden',
     ...SHADOWS.medium,
+  },
+  sectionContainer: {
+    marginBottom: 24,
   },
   header: {
     flexDirection: 'row',
@@ -864,13 +1062,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 16,
     backgroundColor: COLORS.primaryLight,
   },
   headerIcon: {
     width: 24,
     height: 24,
-    marginRight: 10,
+    marginRight: 12,
     tintColor: COLORS.primary,
   },
   headerTitle: {
@@ -889,59 +1087,82 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   closeButtonText: {
-    fontSize: 20,
+    fontSize: 22,
     color: COLORS.text,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   content: {
     padding: 20,
+    paddingBottom: 32,
   },
   label: {
     fontSize: 16,
     fontWeight: '500',
-    marginBottom: 8,
+    marginBottom: 10,
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
   textInput: {
     borderWidth: 1,
     borderColor: '#DDDDDD',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 10,
+    padding: 14,
     fontSize: 16,
     color: COLORS.text,
     backgroundColor: '#FAFAFA',
-    marginBottom: 20,
+    marginBottom: 8,
     fontFamily: FONTS.primary,
     minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  datePickerOuterContainer: {
+    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+    overflow: 'hidden',
+  },
+  iosDatePicker: {
+    height: 180,
+    width: '100%',
   },
   dateSelector: {
     borderWidth: 1,
     borderColor: '#DDDDDD',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 10,
+    padding: 14,
     backgroundColor: '#FAFAFA',
     marginBottom: 16,
+  },
+  dateSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  calendarIconContainer: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  calendarIcon: {
+    fontSize: 18,
   },
   dateText: {
     fontSize: 16,
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
-  datePicker: {
-    marginBottom: 20,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 8,
-    ...Platform.select({
-      ios: {
-        marginTop: -8,
-      },
-    }),
+  editDateText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontFamily: FONTS.primary,
+    marginTop: 6,
+    alignSelf: 'flex-end',
   },
   quickSelectLabel: {
     fontSize: 14,
     color: COLORS.lightText,
-    marginBottom: 8,
+    marginBottom: 10,
     fontFamily: FONTS.secondary,
   },
   timeOptionsContainer: {
@@ -952,9 +1173,10 @@ const styles = StyleSheet.create({
   timeOption: {
     backgroundColor: '#F0F0F0',
     borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     margin: 4,
+    ...SHADOWS.tiny,
   },
   timeOptionSelected: {
     backgroundColor: COLORS.primary,
@@ -966,28 +1188,31 @@ const styles = StyleSheet.create({
   },
   timeOptionTextSelected: {
     color: '#FFFFFF',
+    fontWeight: '500',
   },
   settingsSection: {
     backgroundColor: '#F9F9F9',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
+    ...SHADOWS.tiny,
   },
   settingsSectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: 12,
+    marginBottom: 16,
     fontFamily: FONTS.primary,
   },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   settingLabelContainer: {
     flex: 1,
+    paddingRight: 12,
   },
   settingLabel: {
     fontSize: 15,
@@ -999,75 +1224,52 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.lightText,
     fontFamily: FONTS.secondary,
-    marginTop: 2,
+    marginTop: 4,
   },
   prioritySelector: {
     flexDirection: 'row',
     backgroundColor: '#EFEFEF',
     borderRadius: 8,
     overflow: 'hidden',
+    ...SHADOWS.tiny,
   },
   priorityOption: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
-  prioritySelected: {
-    backgroundColor: COLORS.primary,
+  priorityLow: {
+    backgroundColor: '#4CAF50',
+  },
+  priorityMedium: {
+    backgroundColor: '#FF9800',
+  },
+  priorityHigh: {
+    backgroundColor: '#F44336',
   },
   priorityText: {
     fontSize: 13,
     color: COLORS.text,
     fontFamily: FONTS.secondary,
   },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#EEEEEE',
-    padding: 15,
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#F0F0F0',
-    marginRight: 8,
-    paddingHorizontal: 20,
-  },
-  cancelButtonText: {
-    color: COLORS.text,
-    fontSize: 15,
+  priorityTextSelected: {
+    color: '#FFFFFF',
     fontWeight: '500',
-    fontFamily: FONTS.primary,
-  },
-  setButton: {
-    backgroundColor: COLORS.primary,
-    flex: 1,
-  },
-  setButtonText: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '500',
-    fontFamily: FONTS.primary,
-  },
-  disabledButton: {
-    opacity: 0.5,
   },
   infoText: {
     fontSize: 12,
     color: COLORS.lightText,
     fontFamily: FONTS.secondary,
     marginTop: 8,
+    fontStyle: 'italic',
   },
   advancedOptionsToggle: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 12,
+    marginTop: 8,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
   },
   advancedOptionsText: {
     fontSize: 15,
@@ -1075,17 +1277,25 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
+  advancedIconContainer: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   advancedOptionsIcon: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 14,
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
   advancedOptionsContainer: {
     padding: 16,
+    backgroundColor: '#f7f7f7',
+    borderRadius: 10,
+    marginTop: 8,
   },
   recurrenceSection: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 16,
@@ -1100,9 +1310,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   recurrenceOption: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     margin: 4,
+    backgroundColor: '#eeeeee',
+    borderRadius: 6,
+    ...SHADOWS.tiny,
   },
   recurrenceOptionSelected: {
     backgroundColor: COLORS.primary,
@@ -1112,13 +1325,20 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
+  recurrenceTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
   recurrenceDetailsContainer: {
-    padding: 12,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    ...SHADOWS.tiny,
   },
   intervalContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   intervalLabel: {
     fontSize: 14,
@@ -1134,38 +1354,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
     backgroundColor: '#FAFAFA',
-    flex: 1,
+    minWidth: 50,
+    textAlign: 'center',
   },
   daysLabel: {
     fontSize: 14,
     color: COLORS.text,
     fontFamily: FONTS.primary,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   daysContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginBottom: 12,
   },
   dayOption: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     margin: 4,
+    backgroundColor: '#eeeeee',
+    borderRadius: 6,
   },
   dayOptionSelected: {
     backgroundColor: COLORS.primary,
   },
   dayText: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
   dayTextSelected: {
     color: '#FFFFFF',
+    fontWeight: '500',
   },
-  recurrenceSummary: {
+  recurrenceSummaryContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  recurrenceSummaryLabel: {
     fontSize: 14,
     color: COLORS.text,
     fontFamily: FONTS.primary,
+    fontWeight: '500',
+  },
+  recurrenceSummary: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontFamily: FONTS.primary,
+    fontWeight: '500',
   },
   todoSection: {
     marginBottom: 16,
@@ -1177,7 +1418,10 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   todoListContainer: {
-    padding: 12,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    ...SHADOWS.tiny,
   },
   todoDescription: {
     fontSize: 14,
@@ -1188,13 +1432,13 @@ const styles = StyleSheet.create({
   todoInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   todoInput: {
     borderWidth: 1,
     borderColor: '#DDDDDD',
     borderRadius: 8,
-    padding: 8,
+    padding: 12,
     flex: 1,
     fontSize: 14,
     color: COLORS.text,
@@ -1205,9 +1449,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: COLORS.primary,
     marginLeft: 8,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.tiny,
+  },
+  addTodoButtonDisabled: {
+    backgroundColor: '#DDDDDD',
   },
   addTodoButtonText: {
-    fontSize: 16,
+    fontSize: 20,
     color: 'white',
     fontWeight: '500',
     fontFamily: FONTS.primary,
@@ -1215,34 +1467,49 @@ const styles = StyleSheet.create({
   todoList: {
     marginBottom: 12,
   },
+  todoListWithItems: {
+    borderWidth: 1,
+    borderColor: '#eeeeee',
+    borderRadius: 8,
+    backgroundColor: '#fafafa',
+    maxHeight: height * 0.2,
+  },
   emptyTodoText: {
     fontSize: 14,
-    color: COLORS.text,
+    color: COLORS.lightText,
     fontFamily: FONTS.primary,
     textAlign: 'center',
+    fontStyle: 'italic',
+    padding: 16,
   },
   todoItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eeeeee',
   },
   todoCheckbox: {
-    padding: 4,
+    padding: 6,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 1,
+  checkboxContainer: {
+    width: 22,
+    height: 22,
+    borderWidth: 2,
     borderColor: '#DDDDDD',
     borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   checkboxChecked: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   checkmark: {
     color: '#FFFFFF',
     fontSize: 14,
     textAlign: 'center',
+    lineHeight: 16,
   },
   todoItemText: {
     flex: 1,
@@ -1253,17 +1520,66 @@ const styles = StyleSheet.create({
   },
   todoItemTextCompleted: {
     textDecorationLine: 'line-through',
+    color: COLORS.lightText,
   },
   removeTodoButton: {
-    padding: 4,
+    padding: 6,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   removeTodoButtonText: {
-    fontSize: 16,
-    color: COLORS.text,
-    fontFamily: FONTS.primary,
+    fontSize: 18,
+    color: '#F44336',
+    fontWeight: 'bold',
   },
   todoListContent: {
-    padding: 12,
+    padding: 0,
+  },
+  todoListContentContainer: {
+    paddingBottom: 8,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#EEEEEE',
+    padding: 16,
+  },
+  button: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.tiny,
+  },
+  cancelButton: {
+    backgroundColor: '#F0F0F0',
+    marginRight: 10,
+    paddingHorizontal: 20,
+    minWidth: 100,
+  },
+  cancelButtonText: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '500',
+    fontFamily: FONTS.primary,
+  },
+  setButton: {
+    backgroundColor: COLORS.primary,
+    flex: 1,
+    ...SHADOWS.small,
+  },
+  setButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: FONTS.primary,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });
 

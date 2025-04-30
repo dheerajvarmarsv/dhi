@@ -4,6 +4,7 @@ import PushNotification, { Importance } from 'react-native-push-notification';
 import PushNotificationIOS from '@react-native-community/push-notification-ios';
 import moment from 'moment';
 import RNFS from 'react-native-fs';
+import { v4 as uuidv4 } from 'uuid';
 import Sound from 'react-native-sound';
 
 // Define the reminder structure
@@ -86,66 +87,73 @@ export const playReminderSound = () => {
 // Schedule a local notification
 export const scheduleLocalNotification = (reminder: Reminder) => {
   try {
-    // Choose channel based on priority
-    const channelId = reminder.priority === 'high' 
-      ? 'important-reminders-channel' 
-      : 'reminders-channel';
-
-    // Create title based on priority and type
-    let title = 'Reminder';
-    if (reminder.priority === 'high') {
-      title = '❗ Important Reminder';
-    } else if (reminder.priority === 'medium') {
-      title = '⏰ Reminder';
-    }
+    const channelId = reminder.todoList 
+      ? 'todo-reminders-channel' 
+      : (reminder.recurrence 
+        ? 'recurring-reminders-channel' 
+        : (reminder.priority === 'high' 
+          ? 'important-reminders-channel' 
+          : 'reminders-channel'));
     
-    // Add recurring indicator if applicable
-    if (reminder.recurrence) {
-      title = `🔄 ${title}`;
-    }
-    
-    // Add to-do list indicator
+    // Set title based on reminder type
+    let title = '🔔 Reminder';
     if (reminder.todoList) {
-      title = `📋 ${title}`;
+      title = '📋 To-Do List';
+    } else if (reminder.recurrence) {
+      title = '🔄 Recurring Reminder';
     }
-
-    // Format message text
+    
+    // Add priority icon to title
+    if (reminder.priority === 'high') {
+      title = `❗ ${title}`;
+    } else if (reminder.priority === 'medium') {
+      title = `⚠️ ${title}`;
+    } else {
+      title = `ℹ️ ${title}`;
+    }
+    
+    // Create rich message with formatting
     let message = reminder.text;
     
-    // For to-do lists, include the first few items
+    // For todo lists, format items
     if (reminder.todoList && reminder.todoList.items.length > 0) {
-      message = `${reminder.text}\n\n📋 Todo List:`;
-      const itemsToShow = reminder.todoList.items.slice(0, 3);
-      itemsToShow.forEach(item => {
-        message += `\n- ${item.text}`;
+      message = `${reminder.text}\n\n📋 Tasks:\n`;
+      reminder.todoList.items.forEach((item, index) => {
+        message += `\n${item.isCompleted ? '✓' : '○'} ${item.text}`;
       });
-      
-      if (reminder.todoList.items.length > 3) {
-        message += `\n- ...and ${reminder.todoList.items.length - 3} more`;
+      message += '\n\n⏱️ Due: ' + formatReminderTime(reminder.timestamp);
+    } else {
+      if (!reminder.todoList) {
+        message += '\n\n━━━━━━━━━━━━━━━━━';
       }
+      message += `\n\n⏱️ Due: ${formatReminderTime(reminder.timestamp)}`;
     }
     
-    // Add a recurring indicator to the message
-    if (reminder.recurrence) {
-      let recurrenceText = '';
-      switch (reminder.recurrence.type) {
-        case 'daily':
-          recurrenceText = reminder.recurrence.interval && reminder.recurrence.interval > 1 
-            ? `every ${reminder.recurrence.interval} days` 
-            : 'daily';
+    // Add priority indicator with more descriptive text
+    const priorityInfo = {
+      'low': { icon: 'ℹ️', text: 'Low priority - can be done when convenient' },
+      'medium': { icon: '⚠️', text: 'Medium priority - please attend soon' },
+      'high': { icon: '❗', text: 'High priority - urgent attention needed' }
+    };
+    
+    message += `\n${priorityInfo[reminder.priority].icon} ${priorityInfo[reminder.priority].text}`;
+
+    // Select the appropriate sound file based on priority
+    let soundName = 'default';
+    if (reminder.soundEnabled) {
+      switch (reminder.priority) {
+        case 'high':
+          soundName = 'notification3.mp3';
           break;
-        case 'weekly':
-          recurrenceText = 'weekly';
+        case 'medium':
+          soundName = 'notification2.mp3';
           break;
-        case 'monthly':
-          recurrenceText = 'monthly';
+        case 'low':
+          soundName = 'notification.mp3';
           break;
-        case 'custom':
-          recurrenceText = 'on a custom schedule';
-          break;
+        default:
+          soundName = 'default';
       }
-      
-      message += `\n\n🔄 Repeating ${recurrenceText}`;
     }
 
     // Make sure notification shows up even when app is in foreground
@@ -156,8 +164,8 @@ export const scheduleLocalNotification = (reminder: Reminder) => {
       message: message,
       date: new Date(reminder.timestamp),
       allowWhileIdle: true,
-      playSound: true,
-      soundName: 'default',
+      playSound: reminder.soundEnabled,
+      soundName: soundName,
       vibrate: true,
       priority: reminder.priority === 'high' ? 'high' : 'default',
       visibility: 'public',
@@ -170,9 +178,12 @@ export const scheduleLocalNotification = (reminder: Reminder) => {
         isTodoList: reminder.todoList ? 'true' : 'false'
       },
       tag: reminder.priority,
-      // Use number-based properties for iOS compatibility
-      number: 10,
-      smallIcon: 'ic_notification',
+      // Don't set a fixed number, allow the OS to manage badge counts
+      smallIcon: reminder.todoList ? 'ic_todo' : (reminder.recurrence ? 'ic_recurring' : 'ic_reminder'),
+      largeIcon: reminder.todoList ? 'ic_todo' : (reminder.recurrence ? 'ic_recurring' : 'ic_reminder'),
+      color: reminder.priority === 'high' ? '#FF5252' : 
+             (reminder.priority === 'medium' ? '#FFA726' : 
+              (reminder.todoList ? '#4CAF50' : '#2196F3')),
     });
 
     console.log(`Scheduled reminder for ${new Date(reminder.timestamp).toLocaleString()}: ${reminder.text}`);
@@ -192,14 +203,27 @@ export const initializeReminders = () => {
     onNotification: function(notification: any) {
       console.log('NOTIFICATION:', notification);
       
+      // Get priority and type from userInfo
+      const priority = notification.userInfo?.priority || 'medium';
+      const isRecurring = notification.userInfo?.isRecurring === 'true';
+      const soundEnabled = notification.userInfo?.soundEnabled === 'true';
+      
       // Play sound and vibrate on notification
       try {
-        Vibration.vibrate(300);
+        // Vibrate regardless of sound setting
+        Vibration.vibrate(priority === 'high' ? 500 : 300);
+        
+        // Only play sound if enabled for this reminder
+        if (soundEnabled) {
+          playPrioritySoundEffect(priority as 'low' | 'medium' | 'high', isRecurring);
+        }
+        
         if (Platform.OS === 'ios') {
           PushNotificationIOS.presentLocalNotification({
             alertTitle: notification.title || 'Reminder',
             alertBody: notification.message || '',
-            soundName: 'default',
+            soundName: priority === 'high' ? 'notification3.mp3' : 
+                      (priority === 'medium' ? 'notification2.mp3' : 'notification.mp3'),
           });
         }
       } catch (error) {
@@ -210,6 +234,9 @@ export const initializeReminders = () => {
       if (Platform.OS === 'ios') {
         notification.finish(PushNotificationIOS.FetchResult.NoData);
       }
+      
+      // Update badge count after handling notification
+      updateBadgeCount();
     },
 
     // IOS only permissions
@@ -224,16 +251,16 @@ export const initializeReminders = () => {
     requestPermissions: true,
   });
 
-  // Configure the notification channel for Android with more impactful settings
+  // Configure the notification channels for Android with different settings per type
   if (Platform.OS === 'android') {
     // Regular reminders channel
     PushNotification.createChannel(
       {
         channelId: 'reminders-channel',
         channelName: 'Reminders',
-        channelDescription: 'Reminders for DHI app',
+        channelDescription: 'Regular reminders for DHI app',
         playSound: true,
-        soundName: 'default',
+        soundName: 'notification.mp3',
         importance: Importance.HIGH,
         vibrate: true,
       },
@@ -247,11 +274,39 @@ export const initializeReminders = () => {
         channelName: 'Important Reminders',
         channelDescription: 'High-priority reminders for DHI app',
         playSound: true,
-        soundName: 'default',
+        soundName: 'notification3.mp3',
         importance: Importance.HIGH,
         vibrate: true,
       },
       (created: boolean) => console.log(`Important reminder channel created: ${created}`)
+    );
+    
+    // Todo list channel
+    PushNotification.createChannel(
+      {
+        channelId: 'todo-reminders-channel',
+        channelName: 'Task Lists',
+        channelDescription: 'To-do list tasks for DHI app',
+        playSound: true,
+        soundName: 'notification2.mp3',
+        importance: Importance.DEFAULT,
+        vibrate: true,
+      },
+      (created: boolean) => console.log(`Todo list channel created: ${created}`)
+    );
+    
+    // Recurring reminders channel
+    PushNotification.createChannel(
+      {
+        channelId: 'recurring-reminders-channel',
+        channelName: 'Recurring Reminders',
+        channelDescription: 'Recurring reminders for DHI app',
+        playSound: true,
+        soundName: 'funnotification.mp3',
+        importance: Importance.DEFAULT,
+        vibrate: true,
+      },
+      (created: boolean) => console.log(`Recurring reminders channel created: ${created}`)
     );
   }
 
@@ -263,6 +318,9 @@ export const initializeReminders = () => {
       }
     });
     console.log(`Loaded ${reminders.length} reminders from storage`);
+    
+    // Update badge count on initialization
+    updateBadgeCount();
   });
 };
 
@@ -369,6 +427,37 @@ export const completeReminder = async (reminderId: string): Promise<void> => {
 
   await saveReminders(updatedReminders);
   cancelNotification(reminderId);
+  
+  // Update badge count after completing a reminder
+  await updateBadgeCount();
+};
+
+// Update a todo item's completion status
+export const updateTodoItem = async (reminderId: string, todoItemId: string): Promise<void> => {
+  const reminders = await loadReminders();
+  const updatedReminders = reminders.map((reminder) => {
+    if (reminder.id === reminderId && reminder.todoList) {
+      // Update the specific todo item
+      const updatedItems = reminder.todoList.items.map(item => {
+        if (item.id === todoItemId) {
+          return { ...item, isCompleted: !item.isCompleted };
+        }
+        return item;
+      });
+      
+      // Create updated reminder with new todo items
+      return {
+        ...reminder,
+        todoList: {
+          ...reminder.todoList,
+          items: updatedItems
+        }
+      };
+    }
+    return reminder;
+  });
+
+  await saveReminders(updatedReminders);
 };
 
 // Delete a reminder
@@ -380,6 +469,9 @@ export const deleteReminder = async (reminderId: string): Promise<void> => {
 
   await saveReminders(updatedReminders);
   cancelNotification(reminderId);
+  
+  // Update badge count after deleting a reminder
+  await updateBadgeCount();
 };
 
 // Delete all reminders
@@ -393,6 +485,14 @@ export const deleteAllReminders = async (): Promise<void> => {
   
   // Save an empty array to clear all reminders
   await saveReminders([]);
+  
+  // Reset badge count to zero after deleting all reminders
+  if (Platform.OS === 'ios') {
+    PushNotificationIOS.setApplicationIconBadgeNumber(0);
+  } else {
+    // For Android
+    PushNotification.setApplicationIconBadgeNumber(0);
+  }
 };
 
 // Get all active reminders
@@ -741,29 +841,54 @@ export const formatReminderTime = (timestamp: number): string => {
   }
 };
 
-// Get the time remaining until a reminder is due
+// Format the time remaining as a friendly string
 export const getTimeRemaining = (timestamp: number): string => {
-  const now = moment();
-  const reminderTime = moment(timestamp);
+  const now = Date.now();
+  const diff = timestamp - now;
   
-  if (reminderTime.isBefore(now)) {
-    return 'Overdue';
+  if (diff <= 0) {
+    return 'now';
   }
   
-  const duration = moment.duration(reminderTime.diff(now));
-  const days = Math.floor(duration.asDays());
-  const hours = duration.hours();
-  const minutes = duration.minutes();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
   
   if (days > 0) {
-    return `${days}d ${hours}h`;
-  } else if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  } else if (minutes > 0) {
-    return `${minutes}m`;
-  } else {
-    return 'Due now';
+    return days === 1 ? '1 day' : `${days} days`;
   }
+  
+  if (hours > 0) {
+    return hours === 1 ? '1 hour' : `${hours} hours`;
+  }
+  
+  return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+};
+
+// Get a descriptive message for overdue reminders
+export const getOverdueText = (timestamp: number): string => {
+  const now = Date.now();
+  const diff = now - timestamp; // How long ago it was due
+  
+  if (diff < 0) return "Upcoming";
+  
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) {
+    return days === 1 ? 'Overdue by 1 day' : `Overdue by ${days} days`;
+  }
+  
+  if (hours > 0) {
+    return hours === 1 ? 'Overdue by 1 hour' : `Overdue by ${hours} hours`;
+  }
+  
+  if (minutes > 0) {
+    return minutes === 1 ? 'Overdue by 1 minute' : `Overdue by ${minutes} minutes`;
+  }
+  
+  return 'Just overdue';
 };
 
 // Create a recurring reminder
@@ -850,44 +975,6 @@ export const addTodoListReminder = async (
   scheduleLocalNotification(newReminder);
   
   return newReminder;
-};
-
-// Update a todo item in a reminder
-export const updateTodoItem = async (
-  reminderId: string, 
-  todoItemId: string, 
-  updates: { isCompleted?: boolean; text?: string }
-): Promise<boolean> => {
-  const reminders = await loadReminders();
-  let reminderIndex = reminders.findIndex(r => r.id === reminderId);
-  
-  if (reminderIndex === -1 || !reminders[reminderIndex].todoList) {
-    return false;
-  }
-  
-  const reminder = reminders[reminderIndex];
-  const todoList = reminder.todoList!;
-  const itemIndex = todoList.items.findIndex(item => item.id === todoItemId);
-  
-  if (itemIndex === -1) {
-    return false;
-  }
-  
-  // Apply updates
-  todoList.items[itemIndex] = {
-    ...todoList.items[itemIndex],
-    ...updates
-  };
-  
-  // Check if all items are completed
-  const allCompleted = todoList.items.every(item => item.isCompleted);
-  if (allCompleted) {
-    reminder.isCompleted = true;
-  }
-  
-  // Save the updated reminders
-  await saveReminders(reminders);
-  return true;
 };
 
 // Schedule next occurrence of a recurring reminder
@@ -1012,4 +1099,68 @@ export const handleCompletedReminders = async (): Promise<void> => {
 export const getTodoListReminders = async (): Promise<Reminder[]> => {
   const reminders = await loadReminders();
   return reminders.filter(reminder => reminder.todoList !== undefined);
+};
+
+// Update the badge count to reflect the actual number of active reminders
+export const updateBadgeCount = async () => {
+  try {
+    const reminders = await loadReminders();
+    const activeCount = reminders.filter(r => !r.isCompleted && r.timestamp >= Date.now()).length;
+    
+    // Set the app badge count to match active reminders
+    if (Platform.OS === 'ios') {
+      PushNotificationIOS.setApplicationIconBadgeNumber(activeCount);
+    } else {
+      // For Android
+      PushNotification.setApplicationIconBadgeNumber(activeCount);
+    }
+    
+    return activeCount;
+  } catch (error) {
+    console.error('Error updating badge count:', error);
+    return 0;
+  }
+};
+
+// Add this function after the initializeSound function
+export const playPrioritySoundEffect = (priority: 'low' | 'medium' | 'high' = 'medium', isRecurring = false) => {
+  // Enable playback in silent mode
+  Sound.setCategory('Playback');
+  
+  let soundFile;
+  
+  if (isRecurring) {
+    soundFile = 'funnotification.mp3';
+  } else {
+    switch (priority) {
+      case 'high':
+        soundFile = 'notification3.mp3';
+        break;
+      case 'medium':
+        soundFile = 'notification2.mp3';
+        break;
+      case 'low':
+      default:
+        soundFile = 'notification.mp3';
+        break;
+    }
+  }
+  
+  // Load the sound file
+  const sound = new Sound(soundFile, Sound.MAIN_BUNDLE, (error) => {
+    if (error) {
+      console.error('Failed to load the sound', error);
+      return;
+    }
+    
+    // Play the sound with an appropriate volume
+    sound.setVolume(priority === 'high' ? 1.0 : 0.8);
+    sound.play((success) => {
+      if (!success) {
+        console.error('Playback failed due to audio decoding errors');
+      }
+      // Release when played
+      sound.release();
+    });
+  });
 };

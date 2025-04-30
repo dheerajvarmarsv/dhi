@@ -22,9 +22,17 @@ interface ReminderButtonProps {
 const ReminderButton: React.FC<ReminderButtonProps> = ({ onPress, count }) => {
   const [scale] = useState(new Animated.Value(1));
   const [rotate] = useState(new Animated.Value(0));
+  const [opacity] = useState(new Animated.Value(count > 0 ? 1 : 0.5));
   
   // If count changes, animate the button
   useEffect(() => {
+    // Update opacity based on count
+    Animated.timing(opacity, {
+      toValue: count > 0 ? 1 : 0.5,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
     if (count > 0) {
       // Vibrate for haptic feedback
       Vibration.vibrate(50);
@@ -61,7 +69,7 @@ const ReminderButton: React.FC<ReminderButtonProps> = ({ onPress, count }) => {
         }),
       ]).start();
     }
-  }, [count, scale, rotate]);
+  }, [count, scale, rotate, opacity]);
   
   const animatedStyles = {
     transform: [
@@ -73,6 +81,7 @@ const ReminderButton: React.FC<ReminderButtonProps> = ({ onPress, count }) => {
         }),
       },
     ],
+    opacity,
   };
   
   return (
@@ -80,6 +89,9 @@ const ReminderButton: React.FC<ReminderButtonProps> = ({ onPress, count }) => {
       style={styles.container} 
       onPress={onPress}
       activeOpacity={0.7}
+      accessibilityLabel={`Reminders: ${count} active`}
+      accessibilityHint="Shows your reminders"
+      accessibilityRole="button"
     >
       <Animated.View style={[styles.iconContainer, animatedStyles, count > 0 && styles.activeIconContainer]}>
         <Image 

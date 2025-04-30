@@ -29,11 +29,6 @@ const RemindersScreen: React.FC = () => {
   };
   
   const handleDeleteAllReminders = () => {
-    if (remindersCount === 0) {
-      Alert.alert('No Reminders', 'There are no reminders to delete.');
-      return;
-    }
-    
     Alert.alert(
       'Delete All Reminders',
       'Are you sure you want to delete all reminders? This action cannot be undone.',
@@ -59,16 +54,43 @@ const RemindersScreen: React.FC = () => {
   const getFilterProps = (filter: FilterType) => {
     switch (filter) {
       case 'upcoming':
-        return { showUpcoming: true, showCompleted: false, showRecurring: false, showTodoList: false };
+        return { 
+          showUpcoming: true, 
+          showCompleted: false, 
+          showRecurring: false, 
+          showTodoList: false 
+        };
       case 'completed':
-        return { showUpcoming: false, showCompleted: true, showRecurring: false, showTodoList: false };
+        return { 
+          showUpcoming: false, 
+          showCompleted: true, 
+          showRecurring: true, 
+          showTodoList: true 
+        };
       case 'recurring':
-        return { showUpcoming: true, showCompleted: false, showRecurring: true, showTodoList: false };
+        return { 
+          showUpcoming: true, 
+          showCompleted: true, 
+          showRecurring: true, 
+          showTodoList: false,
+          onlyRecurring: true 
+        };
       case 'todolist':
-        return { showUpcoming: true, showCompleted: true, showRecurring: false, showTodoList: true };
+        return { 
+          showUpcoming: true, 
+          showCompleted: true, 
+          showRecurring: false, 
+          showTodoList: true,
+          onlyTodoList: true 
+        };
       case 'all':
       default:
-        return { showUpcoming: true, showCompleted: true, showRecurring: true, showTodoList: true };
+        return { 
+          showUpcoming: true, 
+          showCompleted: true, 
+          showRecurring: true, 
+          showTodoList: true 
+        };
     }
   };
   
@@ -86,22 +108,26 @@ const RemindersScreen: React.FC = () => {
         <TouchableOpacity 
           style={styles.deleteAllButton} 
           onPress={handleDeleteAllReminders}
-          disabled={remindersCount === 0}
+          accessibilityLabel="Clear all reminders"
+          accessibilityHint="Deletes all reminders regardless of their status"
         >
-          <Text style={[
-            styles.deleteAllButtonText,
-            remindersCount === 0 && styles.disabledText
-          ]}>
+          <Text style={styles.deleteAllButtonText}>
             Clear All
           </Text>
         </TouchableOpacity>
       </View>
       
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollView}>
-        <View style={styles.filterContainer}>
+      <View style={styles.filterContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.filterScroll}
+        >
           <TouchableOpacity
             style={[styles.filterButton, activeFilter === 'all' && styles.activeFilterButton]}
             onPress={() => setActiveFilter('all')}
+            accessibilityLabel="All reminders filter"
+            accessibilityRole="button"
           >
             <Text style={[styles.filterText, activeFilter === 'all' && styles.activeFilterText]}>All</Text>
           </TouchableOpacity>
@@ -109,6 +135,8 @@ const RemindersScreen: React.FC = () => {
           <TouchableOpacity
             style={[styles.filterButton, activeFilter === 'upcoming' && styles.activeFilterButton]}
             onPress={() => setActiveFilter('upcoming')}
+            accessibilityLabel="Upcoming reminders filter"
+            accessibilityRole="button"
           >
             <Text style={[styles.filterText, activeFilter === 'upcoming' && styles.activeFilterText]}>
               Upcoming
@@ -118,6 +146,8 @@ const RemindersScreen: React.FC = () => {
           <TouchableOpacity
             style={[styles.filterButton, activeFilter === 'recurring' && styles.activeFilterButton]}
             onPress={() => setActiveFilter('recurring')}
+            accessibilityLabel="Recurring reminders filter"
+            accessibilityRole="button"
           >
             <Text style={[styles.filterText, activeFilter === 'recurring' && styles.activeFilterText]}>
               🔄 Recurring
@@ -127,6 +157,8 @@ const RemindersScreen: React.FC = () => {
           <TouchableOpacity
             style={[styles.filterButton, activeFilter === 'todolist' && styles.activeFilterButton]}
             onPress={() => setActiveFilter('todolist')}
+            accessibilityLabel="To-Do list reminders filter"
+            accessibilityRole="button"
           >
             <Text style={[styles.filterText, activeFilter === 'todolist' && styles.activeFilterText]}>
               📋 To-Do Lists
@@ -136,13 +168,15 @@ const RemindersScreen: React.FC = () => {
           <TouchableOpacity
             style={[styles.filterButton, activeFilter === 'completed' && styles.activeFilterButton]}
             onPress={() => setActiveFilter('completed')}
+            accessibilityLabel="Completed reminders filter"
+            accessibilityRole="button"
           >
             <Text style={[styles.filterText, activeFilter === 'completed' && styles.activeFilterText]}>
               Completed
             </Text>
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
       
       <ReminderList 
         onReminderCountChange={setRemindersCount}
@@ -161,22 +195,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Math.min(16, width * 0.04),
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: COLORS.background,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: Math.min(18, width * 0.045),
     fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONTS.primary,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 24,
   },
   backButtonText: {
     fontSize: 24,
@@ -184,38 +225,41 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   deleteAllButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
   },
   deleteAllButtonText: {
     fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '500',
+    color: '#FF5252',
+    fontWeight: '600',
     fontFamily: FONTS.secondary,
   },
-  disabledText: {
-    opacity: 0.5,
-  },
-  filterScrollView: {
-    maxHeight: 60,
+  filterContainer: {
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: COLORS.background,
+    paddingVertical: 4,
   },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
+  filterScroll: {
+    paddingHorizontal: Math.min(10, width * 0.025),
+    paddingVertical: Math.min(12, width * 0.03),
   },
   filterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 20,
     marginHorizontal: 4,
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+    minWidth: 48,
+    minHeight: 48,
   },
   activeFilterButton: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterText: {
     fontSize: 14,
@@ -224,7 +268,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   activeFilterText: {
-    color: 'white',
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
 
