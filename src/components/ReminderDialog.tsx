@@ -19,10 +19,42 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS, FONTS, SHADOWS } from '../constants/theme';
-import { extractReminderFromText, addReminder, playReminderSound } from '../utils/reminderUtils';
+import { extractReminderFromText, addReminder, playReminderSound, extractTimeFromText } from '../utils/reminderUtils';
 import moment from 'moment';
 
 const { width, height } = Dimensions.get('window');
+
+// Add enhanced time extraction function for better detection
+const enhancedExtractTimeFromText = (text: string): Date => {
+  // First try the existing extraction
+  const extractionResult = extractReminderFromText(text);
+  if (extractionResult && extractionResult.time) {
+    return extractionResult.time;
+  }
+  
+  // Next try the time extraction utility
+  const { time } = extractTimeFromText(text);
+  if (time) {
+    return time;
+  }
+  
+  // Fallback for simple cases: X min/minutes/mins
+  const minutesMatch = text.match(/(\d+)\s*(min|mins|minutes)/i);
+  if (minutesMatch) {
+    const minutes = parseInt(minutesMatch[1], 10);
+    return new Date(Date.now() + minutes * 60 * 1000);
+  }
+  
+  // Fallback for simple cases: X hour/hours
+  const hoursMatch = text.match(/(\d+)\s*(hour|hours|hr|hrs)/i);
+  if (hoursMatch) {
+    const hours = parseInt(hoursMatch[1], 10);
+    return new Date(Date.now() + hours * 60 * 60 * 1000);
+  }
+  
+  // Default to current time + 5 minutes if nothing detected
+  return new Date(Date.now() + 5 * 60 * 1000);
+};
 
 interface ReminderDialogProps {
   visible: boolean;
@@ -62,68 +94,13 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
     if (visible && reminderText) {
       setText(reminderText);
       
+      // Use the enhanced time extraction
+      const extractedTime = enhancedExtractTimeFromText(reminderText);
+      setDate(extractedTime);
+      
       // For case-insensitive checks
       const textLower = reminderText.toLowerCase();
       
-      // Extract time from text using the utility function
-      const extracted = extractReminderFromText(reminderText);
-      if (extracted && extracted.time) {
-        setDate(extracted.time);
-        // Update text to remove time information
-        setText(extracted.message);
-      } else {
-        // Try to extract a time reference from the text
-        // Check for time patterns
-        if (textLower.includes('tomorrow')) {
-          // Set to tomorrow at 9 AM
-          setDate(moment().add(1, 'day').hour(9).minute(0).second(0).toDate());
-        } else if (textLower.match(/in (\d+) (minute|minutes|min|mins)/i)) {
-          // e.g., "in 5 minutes"
-          const match = textLower.match(/in (\d+) (minute|minutes|min|mins)/i);
-          if (match) {
-            const mins = parseInt(match[1], 10);
-            setDate(moment().add(mins, 'minutes').toDate());
-          }
-        } else if (textLower.match(/in (\d+) (hour|hours)/i)) {
-          // e.g., "in 2 hours"
-          const match = textLower.match(/in (\d+) (hour|hours)/i);
-          if (match) {
-            const hours = parseInt(match[1], 10);
-            setDate(moment().add(hours, 'hours').toDate());
-          }
-        } else if (textLower.match(/at (\d{1,2})(?::(\d{2}))? ?(am|pm)/i)) {
-          // e.g., "at 3:30 pm"
-          const match = textLower.match(/at (\d{1,2})(?::(\d{2}))? ?(am|pm)/i);
-          if (match) {
-            let hour = parseInt(match[1], 10);
-            const minutes = match[2] ? parseInt(match[2], 10) : 0;
-            const ampm = match[3].toLowerCase();
-            
-            // Adjust for PM
-            if (ampm === 'pm' && hour < 12) {
-              hour += 12;
-            } else if (ampm === 'am' && hour === 12) {
-              hour = 0;
-            }
-            
-            const result = moment();
-            result.hour(hour);
-            result.minute(minutes);
-            result.second(0);
-            
-            // If the time has already passed today, set it for tomorrow
-            if (result.isBefore(moment())) {
-              result.add(1, 'day');
-            }
-            
-            setDate(result.toDate());
-          }
-        } else {
-          // Default to 1 hour from now
-          setDate(moment().add(1, 'hour').toDate());
-        }
-      }
-
       // Check for priority keywords
       if (textLower.includes('urgent') || textLower.includes('important') || 
           textLower.includes('critical') || textLower.includes('asap')) {

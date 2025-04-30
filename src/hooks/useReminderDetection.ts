@@ -20,6 +20,7 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
   const [reminderMessage, setReminderMessage] = useState('');
   const [extractedTime, setExtractedTime] = useState<Date | null>(null);
   const [suggestedPriority, setSuggestedPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [wasProcessed, setWasProcessed] = useState(false);
   
   // Clear the reminder intent detection
   const clearReminderIntent = () => {
@@ -27,7 +28,100 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
     setReminderMessage('');
     setExtractedTime(null);
     setSuggestedPriority('medium');
+    setWasProcessed(false); // Reset the processed flag
   };
+  
+  /**
+   * More accurate function to determine if text has a real reminder intent
+   * This will reduce false positives from sentences that mention time periods
+   * but aren't actually requesting a reminder
+   */
+  function hasRealReminderIntent(text: string): boolean {
+    const input = text.toLowerCase();
+    
+    // 1. Direct reminder requests - these are very explicit
+    const directReminderPatterns = [
+      /\bremind me\b/i,
+      /\bset (?:a|an) reminder\b/i,
+      /\bcreate (?:a|an) reminder\b/i,
+      /\bset (?:a|an) alarm\b/i,
+      /\breminder for\b/i,
+      /\bremind me (?:about|to|that)\b/i,
+      /\bcan you remind\b/i,
+      /\bplease remind\b/i,
+      /\bdon't let me forget\b/i,
+      /\blet me know when\b/i,
+      /\bnotify me\b/i,
+      /\balert me\b/i,
+    ];
+    
+    // If any direct pattern matches, this is almost certainly a reminder request
+    if (directReminderPatterns.some(pattern => pattern.test(input))) {
+      return true;
+    }
+    
+    // 2. Check for false positives - common phrases that mention time but aren't reminders
+    const falsePositivePatterns = [
+      /\bi(?:'m| am) sad\b/i,        // "I'm sad that..."
+      /\bi was reminded\b/i,         // Past tense discussions of reminders
+      /\bstory about\b/i,            // Talking about a reminder in a story
+      /\breminded me of\b/i,         // Reminded as in "it made me think of"
+      /\breminder about\b/i,         // Talking about a reminder concept
+      /\btell me about reminders\b/i, // Asking about the reminder feature
+      /\bhow do reminders\b/i,       // Questions about reminders
+      /\bwhat is a reminder\b/i,      // Definitions
+      /\bcame late\b/i,             // Discussions of lateness
+      /\bi was late\b/i,             // Past lateness
+      /\bi am late\b/i,              // Current lateness statement
+      /\bi(?:'m| am) lat\b/i,       // Typo for "I am late"
+      /\bhelp me\b.*\bremind\b/i,   // "Help me remind" vs "remind me"
+    ];
+    
+    // If any false positive pattern matches, this is likely NOT a reminder request
+    if (falsePositivePatterns.some(pattern => pattern.test(input))) {
+      return false;
+    }
+    
+    // 3. For ambiguous cases, check if the intent structure matches a reminder
+    // This requires BOTH a time reference AND an action/reminder context
+    
+    // Time reference patterns
+    const timePatterns = [
+      /\bin \d+ min(?:ute)?s?\b/i,     // "in X minutes"
+      /\bin \d+ hour(?:s)?\b/i,        // "in X hours"
+      /\bin \d+ day(?:s)?\b/i,         // "in X days"
+      /\bin a (?:min(?:ute)?|hour)\b/i, // "in a minute/hour"
+      /\bat \d+(?::\d+)?\s*(?:am|pm)\b/i, // "at 3pm" or "at 3:30pm"
+      /\btoday at\b/i,                // "today at X"
+      /\btomorrow\b/i,                // "tomorrow" 
+      /\blater\b/i,                   // "later today/tonight"
+    ];
+    
+    // Action/intent context patterns that suggest this is actually a reminder
+    const actionIntentPatterns = [
+      /\b(?:to|that I should|that I need to)\b/i, // Purpose of reminder
+      /\b(?:call|text|email|check|do|make|get|buy|pick up|meet|send|take|go to)\b/i, // Common actions
+    ];
+    
+    const hasTimeReference = timePatterns.some(pattern => pattern.test(input));
+    const hasActionOrIntent = actionIntentPatterns.some(pattern => pattern.test(input));
+    
+    // For ambiguous cases, require BOTH time reference AND action/intent
+    // This prevents false positives for simple time mentions
+    if (hasTimeReference && hasActionOrIntent) {
+      return true;
+    }
+    
+    // Direct mentions of minutes that look like reminder requests
+    // e.g. "5 mins" or "remind in 5 mins"
+    if (/\b\d+\s*mins?\b/i.test(input) && 
+        (input.includes("remind") || input.includes("reminder") || input.includes("alert"))) {
+      return true;
+    }
+    
+    // Default to false for anything else - be conservative to avoid false positives
+    return false;
+  }
   
   useEffect(() => {
     // Skip empty messages
@@ -36,155 +130,60 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
       return;
     }
     
+    // Reset processed flag for new input to ensure we can process it again
+    setWasProcessed(false);
+    
     // Apply spelling correction for common reminder-related misspellings
     const correctedInput = correctSpellingMistakes(userInput);
     
-    // Convert to lowercase for case-insensitive matching
-    const input = correctedInput.toLowerCase();
+    // Check for genuine reminder intent using the more accurate function
+    let hasIntent = hasRealReminderIntent(correctedInput);
     
-    // Common reminder patterns with fuzzy matching for typos
-    const reminderPatterns = [
-      /re?m[ie]nd(?:er)? me (?:to|about)? (.+)/i,         // Handles: remind, remnd, remine me
-      /re?m[ie]nd(?:er)? (?:me|us|my|about)? (.+)/i,      // Even more flexible reminder detection
-      /set (?:a|an)? ?re?m[ie]nd(?:er)? (?:to|for|about)? (.+)/i,
-      /don['']?t let me f[oa]rg[ea]t (?:to|about)? (.+)/i, // Handles: forget, forgt, fargat
-      /can you re?m[ie]nd (?:me|us)? (?:about|to)? (.+)/i,
-      /pl[ea]a?se re?m[ie]nd (?:me|us)? (?:to|about)? (.+)/i, // Handles: please, plase, plese
-      /i need to re?m[ea]mb[ea]r (?:to|about)? (.+)/i,
-      /i need to (.+) (at|on|by|tomorrow|later|in)/i,
-      /don['']?t f[oa]rg[ea]t (?:to|about)? (.+)/i,
-      /set (?:an|a)? ?al[ae]rm (?:for|to)? (.+)/i,   // Handles: alarm, alerm
-      /ping me (?:about|to|when)? (.+)/i,
-      /let me know when (.+)/i,
-      /not[iy]fy me (?:about|to|when)? (.+)/i,  // Handles: notify, notfy
-      /can you al[ae]rt me (?:about|to|when)? (.+)/i,
-      /sch[ea]d[ua]le (.+) (?:for|at|on)/i,   // Handles: schedule, schedele
-      /create (?:a|an)? ?re?m[iy]nd(?:er)? (?:for|about)? (.+)/i, // Handles: create a reminder for...
-      /add (?:a|an)? ?re?m[iy]nd(?:er)? (?:for|about)? (.+)/i,    // Handles: add a reminder for...
-    ];
-    
-    // Time-related patterns with fuzzy matching for typos
-    const timePatterns = [
-      /(?:at|@) ?(\d{1,2})(?::(\d{2}))? ?(?:am|pm|a\.m\.|p\.m\.)?/i, // Handles: at 3pm, @ 3pm, at 3:30pm
-      /(?:in|after) ?(\d+) ?(?:min(?:ute)?s?|hour(?:s)?|day(?:s)?|sec(?:ond)?s?|hr(?:s)?)/i, // Handles: in 5 min, after 2 hours
-      /(?:on|next) ?(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)/i,
-      /t[oa]m[oa]rr?[oa]w/i, // Handles: tomorrow, tomorow, tommorow, etc.
-      /next (?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)/i,
-      /(\d{1,2})(?::(\d{2}))? ?(?:am|pm|a\.m\.|p\.m\.)/i, // Handles: 3pm, 3:30pm
-      /(?:this|next) ?(?:we+k|mon(?:th)?)/i, // Handles: this week, next month
-      /l[ae]t[ea]r (?:t[oa]day|t[oa]n[iy]ght)/i, // Handles: later today, later tonight
-      /(?:mo?rn[iy]ng|aft[ea]rno+n|eve?n[iy]ng|t[oa]n[iy]ght)/i, // Handles: morning, afternoon, evening, tonight
-      /(?:in|at) ?the ?(?:mo?rn[iy]ng|aft[ea]rno+n|eve?n[iy]ng)/i, // Handles: in the morning, at the evening
-      /(\d+)[:.](\d+)/i, // HH:MM format
-      /(\d+) ?(?:am|pm|a\.m\.|p\.m\.)/i, // Handles: 3 pm, 3pm
-      /(?:in|after) ?(?:a|an|1) ?(?:min(?:ute)?|hour|day|sec(?:ond)?|hr)/i, // Handles: in a minute, after an hour
-      /(?:few|couple of|couple|some) ?(?:min(?:ute)?s?|hour(?:s)?|day(?:s)?|sec(?:ond)?s?)/i, // Handles: few minutes, couple of hours
-    ];
-    
-    // Action verbs that imply a reminder might be needed
-    const actionVerbs = [
-      'call', 'text', 'email', 'send', 'submit', 'pay', 'check', 'review', 
-      'write', 'read', 'buy', 'get', 'pick', 'meet', 'attend', 'talk', 'speak',
-      'finish', 'complete', 'start', 'begin', 'take', 'visit', 'see', 'watch',
-      'make', 'prepare', 'cook', 'clean', 'workout', 'exercise', 'study', 'do',
-      'water', 'feed', 'walk', 'bring', 'move', 'transfer', 'book', 'schedule',
-      'order', 'cancel', 'run', 'go', 'drive', 'shop', 'contact', 'upload',
-      'download', 'drink', 'eat', 'sleep', 'wake', 'wash', 'charge', 'fix',
-      'reply', 'respond', 'follow up', 'follow', 'print', 'sign', 'update',
-      'refill', 'renew', 'ask', 'tell', 'show', 'find'
-    ];
-    
-    // Check for reminder intent
-    let hasIntent = false;
-    let extractedContent = '';
-    
-    // First check for obvious reminder patterns
-    for (const pattern of reminderPatterns) {
-      const match = input.match(pattern);
-      if (match && match[1]) {
-        hasIntent = true;
-        extractedContent = match[1].trim();
-        break;
+    // Skip false positives that contain reminder-related words but aren't actual requests
+    if (hasIntent) {
+      // Make a final check to avoid false positives in conversational context
+      // If the text is clearly asking about something rather than requesting a reminder
+      const askingAboutReminders = /\b(?:what|how|why|when|tell me about)\s+(?:is|are|do|does|can|could)\s+(?:reminders?|alerts?)\b/i.test(correctedInput);
+      
+      if (askingAboutReminders) {
+        hasIntent = false;
       }
     }
-    
-    // If no obvious pattern, check for time references with potential reminder context
-    if (!hasIntent) {
-      // Look for reminder-related words with fuzzy matching
-      const reminderWords = [
-        'remind', 'reminder', 'remnd', 'remine', 'reminde',
-        'forget', 'forgt', 'forgat', 'dont forget',
-        'remember', 'remembr', 'rember',
-        'notify', 'notif', 'notification',
-        'alert', 'alrt', 'alarm', 'alrm',
-        'schedule', 'schedl', 'schdule',
-        'event', 'appointment', 'meeting', 'deadline',
-        'note', 'memory'
-      ];
-      
-      // Check for fuzzy matches of reminder words
-      const hasReminderWord = reminderWords.some(word => 
-        fuzzyContains(input, word)
-      );
-      
-      // If it has a reminder word and a time pattern, it's likely a reminder
-      if (hasReminderWord) {
-        for (const pattern of timePatterns) {
-          if (pattern.test(input)) {
-            hasIntent = true;
-            extractedContent = input; // Use full text as we don't have a specific extraction
-            break;
-          }
-        }
-      }
-      
-      // Special case: Even if no reminder word, if there's clear time reference and action verb
-      // e.g. "Call mom at 5pm" - no reminder word but clearly needs a reminder
-      if (!hasIntent) {
-        const hasTimeReference = timePatterns.some(pattern => pattern.test(input));
-        const hasActionVerb = actionVerbs.some(verb => 
-          fuzzyContains(input, verb)
-        );
-        
-        if (hasTimeReference && hasActionVerb) {
-          hasIntent = true;
-          extractedContent = input; // Use full text
-        }
-      }
-    }
-    
-    // Use the reminder extraction utility to get the time and message
-    const extractionResult = hasIntent 
-      ? extractReminderFromText(correctedInput) 
-      : null;
-    
-    // Get suggested priority based on keywords
-    const priorityLevel = (() => {
-      // High priority keywords
-      if (input.match(/\b(urgent|asap|important|critical|emergency|immediately|right away|crucial|hurry|rush|priority|high priority|high|very important|super important|extremely important|urgent|must|imperative|vital|essential|necessary|needed|quick|fast)\b/i)) {
-        return 'high';
-      } 
-      // Low priority keywords
-      else if (input.match(/\b(low priority|whenever|not urgent|when you get a chance|no rush|sometime|some time|eventually|when possible|lazy|chill|relax|not important|secondary|tertiary|minor|trivial|if you have time|if you can|casual|no hurry|low)\b/i)) {
-        return 'low';
-      }
-      return 'medium';
-    })();
     
     // Set the state
     setHasReminderIntent(hasIntent);
-    setSuggestedPriority(priorityLevel);
     
-    if (hasIntent && extractionResult) {
-      setReminderMessage(extractionResult.message);
-      setExtractedTime(extractionResult.time);
-    } else if (hasIntent) {
-      setReminderMessage(extractedContent || correctedInput.trim());
+    if (hasIntent) {
+      // Get suggested priority based on keywords
+      const priorityLevel = (() => {
+        // High priority keywords
+        if (correctedInput.match(/\b(urgent|asap|important|critical|emergency|immediately|right away|crucial|hurry|rush|priority|high priority|high|very important|super important|extremely important|urgent|must|imperative|vital|essential|necessary|needed|quick|fast)\b/i)) {
+          return 'high';
+        } 
+        // Low priority keywords
+        else if (correctedInput.match(/\b(low priority|whenever|not urgent|when you get a chance|no rush|sometime|some time|eventually|when possible|lazy|chill|relax|not important|secondary|tertiary|minor|trivial|if you have time|if you can|casual|no hurry|low)\b/i)) {
+          return 'low';
+        }
+        return 'medium';
+      })();
       
-      // If we have an intent but no time from the extractor, try to extract it manually
-      const timeResult = extractTimeFromText(correctedInput);
-      setExtractedTime(timeResult.time);
+      setSuggestedPriority(priorityLevel);
+      
+      // Use the reminder extraction utility to get the time and message
+      const extractionResult = extractReminderFromText(correctedInput);
+      
+      if (extractionResult) {
+        setReminderMessage(extractionResult.message);
+        setExtractedTime(extractionResult.time);
+      } else {
+        setReminderMessage(correctedInput.trim());
+        
+        // If no time from the extractor, try to extract it manually
+        const timeResult = extractTimeFromText(correctedInput);
+        setExtractedTime(timeResult.time);
+      }
     } else {
+      // Not a reminder intent
       setReminderMessage('');
       setExtractedTime(null);
     }
@@ -300,6 +299,7 @@ function correctSpellingMistakes(input: string): string {
     'reminme': 'remind me',
     'remine': 'remind',
     'reminde': 'remind',
+    'reminf': 'remind',
     'rememberme': 'remember me',
     'remembrme': 'remember me',
     'forgt': 'forget',

@@ -348,6 +348,9 @@ const ChatScreen = ({ route, navigation }: Props) => {
   };
 
   const handleSendMessage = async () => {
+    // Store current input to preserve it after setting reminder
+    const currentInput = userInput;
+    
     // If message has reminder intent, show reminder dialog
     if (hasReminderIntent) {
       setReminderDialogVisible(true);
@@ -358,7 +361,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       Alert.alert('Model Not Loaded', 'Please wait for the model to load.');
       return;
     }
-    if (!userInput.trim()) {
+    if (!currentInput.trim()) {
       return;
     }
 
@@ -372,7 +375,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
 
     // Add user message to conversation
-    const newUserMessage: Message = { role: 'user', content: userInput.trim() };
+    const newUserMessage: Message = { role: 'user', content: currentInput.trim() };
     const updatedConversation = [...conversation, newUserMessage];
     setConversation(updatedConversation);
     setUserInput('');
@@ -383,7 +386,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       // If this is the first user message and the chat title is "New Chat",
       // automatically rename it using the first 20 characters
       if (chatTitle === 'New Chat' && conversation.length === 1) {
-        const newTitle = userInput.trim().slice(0, 20);
+        const newTitle = currentInput.trim().slice(0, 20);
         setChatTitle(newTitle);
         if (currentChatId) {
           await updateChatSession(currentChatId, {
@@ -1051,8 +1054,16 @@ const ChatScreen = ({ route, navigation }: Props) => {
     navigation.navigate('Chat', { selectedModel, chatId: id });
   };
   
+  // Modify reminder dialog handling to not clear intent on close
+  const handleReminderDialogClose = () => {
+    setReminderDialogVisible(false);
+    // Don't clear reminder intent here - this allows the same message
+    // to trigger the dialog again if the user clicks send
+  };
+
+  // Update the reminder set function to include the user's message
   const handleReminderSet = async (reminderTime: Date, reminderText: string) => {
-    // Clear the reminder intent
+    // Clear the reminder intent now that we've processed it
     clearReminderIntent();
     
     // Reset user input
@@ -1062,7 +1073,13 @@ const ChatScreen = ({ route, navigation }: Props) => {
     const activeReminders = await getActiveReminders();
     setActiveReminderCount(activeReminders.length);
     
-    // Add confirmation message to conversation
+    // Add the user's original message to the conversation first
+    const userMessage: Message = { 
+      role: 'user', 
+      content: reminderText,
+    };
+    
+    // Create confirmation message
     const timeFormatted = reminderTime.toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit',
@@ -1076,8 +1093,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
     
     const confirmationMessage = `I've set a reminder for "${reminderText}" on ${dateFormatted} at ${timeFormatted}.`;
     
+    // Add both user message and system confirmation
     setConversation((prev) => [
       ...prev,
+      userMessage, // Add the user message first
       {
         role: 'system',
         content: confirmationMessage,
@@ -1309,10 +1328,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       {/* Reminder Dialog */}
       <ReminderDialog
         visible={reminderDialogVisible}
-        onClose={() => {
-          setReminderDialogVisible(false);
-          clearReminderIntent();
-        }}
+        onClose={handleReminderDialogClose}
         reminderText={reminderMessage}
         chatId={currentChatId || undefined}
         onReminderSet={handleReminderSet}
