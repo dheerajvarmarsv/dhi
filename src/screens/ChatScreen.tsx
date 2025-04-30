@@ -37,7 +37,7 @@ import { COLORS, FONTS } from '../constants/theme';
 import ReminderDialog from '../components/ReminderDialog';
 import ReminderButton from '../components/ReminderButton';
 import { useReminderDetection } from '../hooks/useReminderDetection';
-import { getActiveReminders, setupReminderSystem } from '../utils/reminderUtils';
+import { getActiveReminders, setupReminderSystem, Reminder } from '../utils/reminderUtils';
 import { processAssistantMessageForReminder } from '../utils/reminderIntegration';
 
 // Get device dimensions for responsive design
@@ -1062,7 +1062,14 @@ const ChatScreen = ({ route, navigation }: Props) => {
   };
 
   // Update the reminder set function to include the user's message
-  const handleReminderSet = async (reminderTime: Date, reminderText: string) => {
+  const handleReminderSet = async (
+    reminderTime: Date, 
+    reminderText: string,
+    options?: {
+      recurrence?: Reminder['recurrence'],
+      todoItems?: { id: string; text: string; isCompleted: boolean }[]
+    }
+  ) => {
     // Clear the reminder intent now that we've processed it
     clearReminderIntent();
     
@@ -1091,7 +1098,65 @@ const ChatScreen = ({ route, navigation }: Props) => {
       year: reminderTime.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
     });
     
-    const confirmationMessage = `I've set a reminder for "${reminderText}" on ${dateFormatted} at ${timeFormatted}.`;
+    let confirmationMessage = `I've set a reminder for "${reminderText}" on ${dateFormatted} at ${timeFormatted}.`;
+    
+    // Add recurring details if available
+    if (options?.recurrence) {
+      let recurrenceText = '';
+      switch (options.recurrence.type) {
+        case 'daily':
+          recurrenceText = options.recurrence.interval && options.recurrence.interval > 1 
+            ? `every ${options.recurrence.interval} days` 
+            : 'daily';
+          break;
+        case 'weekly':
+          if (options.recurrence.daysOfWeek && options.recurrence.daysOfWeek.length > 0) {
+            const dayNames = options.recurrence.daysOfWeek
+              .sort()
+              .map((day: number) => {
+                const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                return days[day];
+              })
+              .join(', ');
+            recurrenceText = `weekly on ${dayNames}`;
+          } else {
+            recurrenceText = options.recurrence.interval && options.recurrence.interval > 1 
+              ? `every ${options.recurrence.interval} weeks` 
+              : 'weekly';
+          }
+          break;
+        case 'monthly':
+          if (options.recurrence.dayOfMonth) {
+            recurrenceText = `monthly on day ${options.recurrence.dayOfMonth}`;
+          } else {
+            recurrenceText = 'monthly';
+          }
+          break;
+        case 'custom':
+          recurrenceText = options.recurrence.interval 
+            ? `every ${options.recurrence.interval} days` 
+            : 'on a custom schedule';
+          break;
+      }
+      
+      confirmationMessage += ` This reminder will repeat ${recurrenceText}.`;
+    }
+    
+    // Add to-do list details if available
+    if (options?.todoItems && options.todoItems.length > 0) {
+      confirmationMessage += ` I've added ${options.todoItems.length} items to your to-do list:`;
+      
+      // List the first 3 items
+      const itemsToShow = options.todoItems.slice(0, 3);
+      itemsToShow.forEach(item => {
+        confirmationMessage += `\n- ${item.text}`;
+      });
+      
+      // If there are more items, add a note
+      if (options.todoItems.length > 3) {
+        confirmationMessage += `\n- ...and ${options.todoItems.length - 3} more`;
+      }
+    }
     
     // Add both user message and system confirmation
     setConversation((prev) => [

@@ -16,6 +16,22 @@ export interface Reminder {
   isCompleted: boolean;
   soundEnabled: boolean; // Whether sound is enabled for this reminder
   priority: 'low' | 'medium' | 'high'; // Priority level
+  recurrence?: {
+    type: 'daily' | 'weekly' | 'monthly' | 'custom'; // Type of recurrence
+    interval?: number; // Interval (every X days/weeks/months)
+    daysOfWeek?: number[]; // For weekly: days of week (0-6, Sunday-Saturday)
+    dayOfMonth?: number; // For monthly: day of month (1-31)
+    endDate?: number; // Optional end date for recurrence
+    count?: number; // Optional number of occurrences
+  };
+  todoList?: {
+    items: {
+      id: string;
+      text: string;
+      isCompleted: boolean;
+      createdAt: number;
+    }[];
+  };
 }
 
 // Path to store reminders
@@ -75,12 +91,61 @@ export const scheduleLocalNotification = (reminder: Reminder) => {
       ? 'important-reminders-channel' 
       : 'reminders-channel';
 
-    // Create title based on priority
+    // Create title based on priority and type
     let title = 'Reminder';
     if (reminder.priority === 'high') {
       title = '❗ Important Reminder';
     } else if (reminder.priority === 'medium') {
       title = '⏰ Reminder';
+    }
+    
+    // Add recurring indicator if applicable
+    if (reminder.recurrence) {
+      title = `🔄 ${title}`;
+    }
+    
+    // Add to-do list indicator
+    if (reminder.todoList) {
+      title = `📋 ${title}`;
+    }
+
+    // Format message text
+    let message = reminder.text;
+    
+    // For to-do lists, include the first few items
+    if (reminder.todoList && reminder.todoList.items.length > 0) {
+      message = `${reminder.text}\n\n📋 Todo List:`;
+      const itemsToShow = reminder.todoList.items.slice(0, 3);
+      itemsToShow.forEach(item => {
+        message += `\n- ${item.text}`;
+      });
+      
+      if (reminder.todoList.items.length > 3) {
+        message += `\n- ...and ${reminder.todoList.items.length - 3} more`;
+      }
+    }
+    
+    // Add a recurring indicator to the message
+    if (reminder.recurrence) {
+      let recurrenceText = '';
+      switch (reminder.recurrence.type) {
+        case 'daily':
+          recurrenceText = reminder.recurrence.interval && reminder.recurrence.interval > 1 
+            ? `every ${reminder.recurrence.interval} days` 
+            : 'daily';
+          break;
+        case 'weekly':
+          recurrenceText = 'weekly';
+          break;
+        case 'monthly':
+          recurrenceText = 'monthly';
+          break;
+        case 'custom':
+          recurrenceText = 'on a custom schedule';
+          break;
+      }
+      
+      message += `\n\n🔄 Repeating ${recurrenceText}`;
     }
 
     // Make sure notification shows up even when app is in foreground
@@ -88,7 +153,7 @@ export const scheduleLocalNotification = (reminder: Reminder) => {
       id: reminder.id,
       channelId: channelId,
       title: title,
-      message: reminder.text,
+      message: message,
       date: new Date(reminder.timestamp),
       allowWhileIdle: true,
       playSound: true,
@@ -100,7 +165,9 @@ export const scheduleLocalNotification = (reminder: Reminder) => {
       userInfo: {
         soundEnabled: reminder.soundEnabled ? 'true' : 'false',
         priority: reminder.priority,
-        id: reminder.id
+        id: reminder.id,
+        isRecurring: reminder.recurrence ? 'true' : 'false',
+        isTodoList: reminder.todoList ? 'true' : 'false'
       },
       tag: reminder.priority,
       // Use number-based properties for iOS compatibility
@@ -313,6 +380,19 @@ export const deleteReminder = async (reminderId: string): Promise<void> => {
 
   await saveReminders(updatedReminders);
   cancelNotification(reminderId);
+};
+
+// Delete all reminders
+export const deleteAllReminders = async (): Promise<void> => {
+  const reminders = await loadReminders();
+  
+  // Cancel all notifications for these reminders
+  for (const reminder of reminders) {
+    cancelNotification(reminder.id);
+  }
+  
+  // Save an empty array to clear all reminders
+  await saveReminders([]);
 };
 
 // Get all active reminders
@@ -635,6 +715,14 @@ export const extractReminderFromText = (
 export const setupReminderSystem = () => {
   initializeReminders();
   requestNotificationPermissions();
+  
+  // Schedule and process any recurring reminders
+  handleCompletedReminders();
+  
+  // Set up a periodic check for completed reminders
+  setInterval(() => {
+    handleCompletedReminders();
+  }, 60000 * 10); // Check every 10 minutes
 };
 
 // Format reminder time in a human-readable way
@@ -676,4 +764,252 @@ export const getTimeRemaining = (timestamp: number): string => {
   } else {
     return 'Due now';
   }
+};
+
+// Create a recurring reminder
+export const addRecurringReminder = async (
+  text: string,
+  timestamp: number,
+  recurrence: Reminder['recurrence'],
+  chatId?: string,
+  priority: 'low' | 'medium' | 'high' = 'medium',
+  soundEnabled: boolean = true
+): Promise<Reminder> => {
+  const reminders = await loadReminders();
+  
+  // Generate a unique ID
+  const id = `recurring_reminder_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  
+  const newReminder: Reminder = {
+    id,
+    text,
+    timestamp,
+    chatId,
+    createdAt: Date.now(),
+    isCompleted: false,
+    soundEnabled,
+    priority,
+    recurrence,
+  };
+  
+  // Add the reminder to the list
+  reminders.push(newReminder);
+  
+  // Save the updated list
+  await saveReminders(reminders);
+  
+  // Schedule the notification
+  scheduleLocalNotification(newReminder);
+  
+  return newReminder;
+};
+
+// Create a to-do list reminder
+export const addTodoListReminder = async (
+  text: string,
+  timestamp: number,
+  todoItems: string[],
+  chatId?: string,
+  priority: 'low' | 'medium' | 'high' = 'medium',
+  soundEnabled: boolean = true
+): Promise<Reminder> => {
+  const reminders = await loadReminders();
+  
+  // Generate a unique ID
+  const id = `todo_reminder_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  
+  // Create todo items with unique IDs
+  const items = todoItems.map(itemText => ({
+    id: `todo_item_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    text: itemText,
+    isCompleted: false,
+    createdAt: Date.now()
+  }));
+  
+  const newReminder: Reminder = {
+    id,
+    text,
+    timestamp,
+    chatId,
+    createdAt: Date.now(),
+    isCompleted: false,
+    soundEnabled,
+    priority,
+    todoList: {
+      items
+    }
+  };
+  
+  // Add the reminder to the list
+  reminders.push(newReminder);
+  
+  // Save the updated list
+  await saveReminders(reminders);
+  
+  // Schedule the notification
+  scheduleLocalNotification(newReminder);
+  
+  return newReminder;
+};
+
+// Update a todo item in a reminder
+export const updateTodoItem = async (
+  reminderId: string, 
+  todoItemId: string, 
+  updates: { isCompleted?: boolean; text?: string }
+): Promise<boolean> => {
+  const reminders = await loadReminders();
+  let reminderIndex = reminders.findIndex(r => r.id === reminderId);
+  
+  if (reminderIndex === -1 || !reminders[reminderIndex].todoList) {
+    return false;
+  }
+  
+  const reminder = reminders[reminderIndex];
+  const todoList = reminder.todoList!;
+  const itemIndex = todoList.items.findIndex(item => item.id === todoItemId);
+  
+  if (itemIndex === -1) {
+    return false;
+  }
+  
+  // Apply updates
+  todoList.items[itemIndex] = {
+    ...todoList.items[itemIndex],
+    ...updates
+  };
+  
+  // Check if all items are completed
+  const allCompleted = todoList.items.every(item => item.isCompleted);
+  if (allCompleted) {
+    reminder.isCompleted = true;
+  }
+  
+  // Save the updated reminders
+  await saveReminders(reminders);
+  return true;
+};
+
+// Schedule next occurrence of a recurring reminder
+export const scheduleNextOccurrence = async (reminder: Reminder): Promise<Reminder | null> => {
+  if (!reminder.recurrence) {
+    return null;
+  }
+  
+  let nextTimestamp: number | null = null;
+  const currentDate = new Date(reminder.timestamp);
+  
+  switch (reminder.recurrence.type) {
+    case 'daily':
+      const intervalDays = reminder.recurrence.interval || 1;
+      currentDate.setDate(currentDate.getDate() + intervalDays);
+      nextTimestamp = currentDate.getTime();
+      break;
+      
+    case 'weekly':
+      if (reminder.recurrence.daysOfWeek && reminder.recurrence.daysOfWeek.length > 0) {
+        // Find the next day of week that matches
+        const today = new Date().getDay();
+        const daysOfWeek = [...reminder.recurrence.daysOfWeek].sort();
+        
+        // Find the next day of week after today
+        let nextDay = daysOfWeek.find(day => day > today);
+        
+        if (nextDay === undefined) {
+          // If no day is greater than today, take the first day (next week)
+          nextDay = daysOfWeek[0];
+          const daysUntilNext = 7 - today + nextDay;
+          currentDate.setDate(currentDate.getDate() + daysUntilNext);
+        } else {
+          const daysUntilNext = nextDay - today;
+          currentDate.setDate(currentDate.getDate() + daysUntilNext);
+        }
+        
+        nextTimestamp = currentDate.getTime();
+      } else {
+        // Default to same day next week
+        const interval = reminder.recurrence.interval || 1;
+        currentDate.setDate(currentDate.getDate() + (7 * interval));
+        nextTimestamp = currentDate.getTime();
+      }
+      break;
+      
+    case 'monthly':
+      if (reminder.recurrence.dayOfMonth) {
+        // Set to the specified day of the next month
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        
+        // Make sure the day exists in the month (e.g., handle February 30)
+        const maxDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+        const targetDay = Math.min(reminder.recurrence.dayOfMonth, maxDay);
+        
+        currentDate.setDate(targetDay);
+        nextTimestamp = currentDate.getTime();
+      } else {
+        // Default to same day next month
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        nextTimestamp = currentDate.getTime();
+      }
+      break;
+      
+    case 'custom':
+      if (reminder.recurrence.interval) {
+        // Custom interval in days
+        currentDate.setDate(currentDate.getDate() + reminder.recurrence.interval);
+        nextTimestamp = currentDate.getTime();
+      }
+      break;
+  }
+  
+  if (nextTimestamp === null) {
+    return null;
+  }
+  
+  // Check if we've reached the end date or max count
+  if (reminder.recurrence.endDate && nextTimestamp > reminder.recurrence.endDate) {
+    return null;
+  }
+  
+  // Create a new reminder for the next occurrence
+  const nextReminder: Reminder = {
+    ...reminder,
+    id: `recurring_${reminder.id}_${Date.now()}`,
+    timestamp: nextTimestamp,
+    isCompleted: false,
+    createdAt: Date.now()
+  };
+  
+  // Save the new occurrence
+  const reminders = await loadReminders();
+  reminders.push(nextReminder);
+  await saveReminders(reminders);
+  
+  // Schedule notification for the next occurrence
+  scheduleLocalNotification(nextReminder);
+  
+  return nextReminder;
+};
+
+// Handle reminders that have occurred
+export const handleCompletedReminders = async (): Promise<void> => {
+  const reminders = await loadReminders();
+  let hasChanges = false;
+  
+  for (const reminder of reminders) {
+    // Check if this is a completed recurring reminder
+    if (reminder.isCompleted && reminder.recurrence) {
+      await scheduleNextOccurrence(reminder);
+      hasChanges = true;
+    }
+  }
+  
+  if (hasChanges) {
+    await saveReminders(reminders);
+  }
+};
+
+// Get all todo list reminders
+export const getTodoListReminders = async (): Promise<Reminder[]> => {
+  const reminders = await loadReminders();
+  return reminders.filter(reminder => reminder.todoList !== undefined);
 };

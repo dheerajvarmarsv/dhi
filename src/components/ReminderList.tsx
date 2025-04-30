@@ -19,9 +19,19 @@ const { width } = Dimensions.get('window');
 
 interface ReminderListProps {
   onReminderCountChange?: (count: number) => void;
+  showUpcoming?: boolean;
+  showCompleted?: boolean;
+  showRecurring?: boolean;
+  showTodoList?: boolean;
 }
 
-const ReminderList: React.FC<ReminderListProps> = ({ onReminderCountChange }) => {
+const ReminderList: React.FC<ReminderListProps> = ({ 
+  onReminderCountChange,
+  showUpcoming = true,
+  showCompleted = true, 
+  showRecurring = true,
+  showTodoList = true
+}) => {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -36,17 +46,49 @@ const ReminderList: React.FC<ReminderListProps> = ({ onReminderCountChange }) =>
     }, 60000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [showUpcoming, showCompleted, showRecurring, showTodoList]);
   
   const loadReminderData = async () => {
     try {
       const allReminders = await loadReminders();
       
+      // Filter reminders based on props
+      const filteredReminders = allReminders.filter(reminder => {
+        const isUpcoming = !reminder.isCompleted && reminder.timestamp >= Date.now();
+        const isCompleted = reminder.isCompleted;
+        const isRecurring = !!reminder.recurrence;
+        const isTodoList = !!reminder.todoList;
+        
+        // Apply filters
+        if (isUpcoming && !showUpcoming) return false;
+        if (isCompleted && !showCompleted) return false;
+        
+        // Special case: if we're showing only recurring items
+        if (showRecurring && !showTodoList && !isRecurring) return false;
+        
+        // Special case: if we're showing only todo lists
+        if (showTodoList && !showRecurring && !isTodoList) return false;
+        
+        return true;
+      });
+      
       // Sort reminders by timestamp, active ones first
-      const sortedReminders = allReminders.sort((a, b) => {
+      const sortedReminders = filteredReminders.sort((a, b) => {
         // Active reminders first
         if (!a.isCompleted && b.isCompleted) return -1;
         if (a.isCompleted && !b.isCompleted) return 1;
+        
+        // Recurring reminders after regular ones if filtering for recurring
+        if (showRecurring && !showUpcoming) {
+          if (a.recurrence && !b.recurrence) return -1;
+          if (!a.recurrence && b.recurrence) return 1;
+        }
+        
+        // Todo list reminders first if filtering for todo lists
+        if (showTodoList && !showUpcoming) {
+          if (a.todoList && !b.todoList) return -1;
+          if (!a.todoList && b.todoList) return 1;
+        }
         
         // Then by timestamp
         return a.timestamp - b.timestamp;
@@ -131,6 +173,7 @@ const ReminderList: React.FC<ReminderListProps> = ({ onReminderCountChange }) =>
   
   const handleNavigateToChat = (chatId?: string) => {
     if (chatId) {
+      // @ts-ignore - Ignore the type error for now
       navigation.navigate('Chat', { chatId });
     }
   };
@@ -138,14 +181,30 @@ const ReminderList: React.FC<ReminderListProps> = ({ onReminderCountChange }) =>
   const renderReminderItem = ({ item }: { item: Reminder }) => {
     const isPast = item.timestamp < Date.now();
     const isActive = !item.isCompleted && !isPast;
+    const isRecurring = !!item.recurrence;
+    const isTodoList = !!item.todoList;
     
     return (
       <Animated.View style={[
         styles.reminderItem,
         item.isCompleted && styles.completedItem,
         isPast && !item.isCompleted && styles.pastItem,
+        isRecurring && styles.recurringItem,
+        isTodoList && styles.todoListItem,
       ]}>
         <View style={styles.reminderContent}>
+          <View style={styles.reminderHeader}>
+            {isRecurring && (
+              <Text style={styles.recurringBadge}>🔄 Recurring</Text>
+            )}
+            {isTodoList && (
+              <Text style={styles.todoBadge}>📋 To-Do List</Text>
+            )}
+            {item.priority === 'high' && (
+              <Text style={styles.priorityBadge}>❗ High Priority</Text>
+            )}
+          </View>
+          
           <Text style={[
             styles.reminderText,
             item.isCompleted && styles.completedText,
@@ -153,6 +212,33 @@ const ReminderList: React.FC<ReminderListProps> = ({ onReminderCountChange }) =>
           ]}>
             {item.text}
           </Text>
+          
+          {/* Display todo list items if present */}
+          {isTodoList && item.todoList && item.todoList.items && (
+            <View style={styles.todoItemsContainer}>
+              {item.todoList.items.slice(0, 3).map((todoItem, index) => (
+                <View key={todoItem.id || index} style={styles.todoItem}>
+                  <View style={[
+                    styles.todoCheckbox,
+                    todoItem.isCompleted && styles.todoCheckboxChecked
+                  ]}>
+                    {todoItem.isCompleted && <Text style={styles.todoCheckmark}>✓</Text>}
+                  </View>
+                  <Text style={[
+                    styles.todoItemText,
+                    todoItem.isCompleted && styles.todoItemTextCompleted
+                  ]}>
+                    {todoItem.text}
+                  </Text>
+                </View>
+              ))}
+              {item.todoList.items.length > 3 && (
+                <Text style={styles.todoItemsMore}>
+                  +{item.todoList.items.length - 3} more items
+                </Text>
+              )}
+            </View>
+          )}
           
           <View style={styles.reminderMetadata}>
             <Text style={[
@@ -162,6 +248,30 @@ const ReminderList: React.FC<ReminderListProps> = ({ onReminderCountChange }) =>
             ]}>
               {formatReminderTime(item.timestamp)}
             </Text>
+            
+            {/* Show recurrence information */}
+            {isRecurring && item.recurrence && (
+              <Text style={styles.recurrenceInfo}>
+                {item.recurrence.type === 'daily' && (
+                  item.recurrence.interval && item.recurrence.interval > 1 
+                    ? `Every ${item.recurrence.interval} days` 
+                    : 'Daily'
+                )}
+                {item.recurrence.type === 'weekly' && (
+                  'Weekly'
+                )}
+                {item.recurrence.type === 'monthly' && (
+                  item.recurrence.dayOfMonth 
+                    ? `Monthly (Day ${item.recurrence.dayOfMonth})` 
+                    : 'Monthly'
+                )}
+                {item.recurrence.type === 'custom' && (
+                  item.recurrence.interval 
+                    ? `Every ${item.recurrence.interval} days` 
+                    : 'Custom'
+                )}
+              </Text>
+            )}
             
             {isActive && (
               <Text style={styles.timeRemaining}>
@@ -397,6 +507,95 @@ const styles = StyleSheet.create({
     color: COLORS.lightText,
     fontFamily: FONTS.secondary,
     textAlign: 'center',
+  },
+  reminderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  recurringBadge: {
+    backgroundColor: '#FFD700',
+    color: '#000',
+    fontSize: 12,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  todoBadge: {
+    backgroundColor: '#4CAF50',
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  priorityBadge: {
+    backgroundColor: '#FF0000',
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  todoItemsContainer: {
+    marginBottom: 8,
+  },
+  todoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  todoCheckbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: '#000',
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  todoCheckboxChecked: {
+    backgroundColor: '#4CAF50',
+  },
+  todoCheckmark: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  todoItemText: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontFamily: FONTS.primary,
+  },
+  todoItemTextCompleted: {
+    color: '#888888',
+    textDecorationLine: 'line-through',
+  },
+  todoItemsMore: {
+    fontSize: 14,
+    color: COLORS.lightText,
+    fontFamily: FONTS.secondary,
+  },
+  recurrenceInfo: {
+    fontSize: 12,
+    color: COLORS.lightText,
+    fontFamily: FONTS.secondary,
+    marginLeft: 8,
+  },
+  recurringItem: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFD700',
+  },
+  todoListItem: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
   },
 });
 
