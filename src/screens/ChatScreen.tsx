@@ -36,6 +36,18 @@ import PersonaSelector from '../components/PersonaSelector';
 import ChatSidebar from '../components/ChatSidebar';
 import { Message, ChatSession } from '../types';
 import { COLORS, FONTS } from '../constants/theme';
+
+// Nice‑looking typographic defaults for Markdown in the chat bubbles
+const markdownStyles: any = {
+  heading1: { fontSize: 20, fontWeight: '700', marginBottom: 8, color: '#333' },
+  heading2: { fontSize: 18, fontWeight: '700', marginBottom: 6, color: '#333' },
+  heading3: { fontSize: 16, fontWeight: '700', marginBottom: 4, color: '#333' },
+  paragraph: { fontSize: 16, lineHeight: 22, marginBottom: 8, color: '#333' },
+  list_item: { fontSize: 16, lineHeight: 22, marginBottom: 6, color: '#333' },
+  bullet_list: { marginBottom: 8 },
+  ordered_list: { marginBottom: 8 },
+  strong: { fontWeight: '700' },
+};
 import ReminderDialog from '../components/ReminderDialog';
 import ReminderButton from '../components/ReminderButton';
 import { useReminderDetection } from '../hooks/useReminderDetection';
@@ -672,6 +684,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   };
 
+  // Helper: remove leading meta‑preface like “Here’s a gentle and empathetic approach:”
+  const stripMetaPreface = (text: string): string => {
+    // Matches:   **Here's a gentle and empathetic approach:**   or   Here's some suggestions:
+    return text.replace(
+      /^(?:\*\*)?\s*Here(?:’|'|’)s?\s+(?:a|an|some|another|one|this)\b[^:]{0,100}:\s*/i,
+      ''
+    );
+  };
+
   // Add a helper function to clean up the content - more focused, less aggressive cleaning
   const cleanupEmotionSections = (content: string): string => {
     // Store the original content to compare later
@@ -713,32 +734,49 @@ const ChatScreen = ({ route, navigation }: Props) => {
     if (selectedPersonaId === 'compass') {
       return cleanupEmotionSections(content);
     }
-    
+
     // For all other personas - minimal cleaning
     let cleaned = content;
-    
+
     // Remove only the most obvious tags
     cleaned = cleaned.replace(/<\/?think>/g, '');
     cleaned = cleaned.replace(/<\/?empathy_chain>/g, '');
     cleaned = cleaned.replace(/<\/?assistant_response>/g, '');
-    
+
     // Only remove obvious prompt leakage
-    if (cleaned.includes('# Interaction/Personality Configuration Blueprint') || 
+    if (cleaned.includes('# Interaction/Personality Configuration Blueprint') ||
         cleaned.includes('## Core Style Identity & Expertise Profile')) {
       cleaned = cleaned.replace(/# Interaction\/Personality Configuration Blueprint[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
     }
-    
-    if (cleaned.includes('# Natural Conversation Framework') || 
+
+    if (cleaned.includes('# Natural Conversation Framework') ||
         cleaned.includes('## Core Approach')) {
       cleaned = cleaned.replace(/# Natural Conversation Framework[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
     }
-    
+
     // Remove any obvious reasoning marks
     cleaned = cleaned.replace(/\(reason:.*?\)/g, '');
-    
+
+    // NEW: strip “Here's a … approach:” style meta lines
+    cleaned = stripMetaPreface(cleaned);
+
+    // --- auto‑insert spacing before list items -------------
+    const insertListBreaks = (txt: string) =>
+      txt
+        // bullet lists: ensure a blank line before "- "
+        .replace(/([^\n])\n-\s/g, '$1\n\n- ')
+        // numbered lists: blank line before "1. ", "2. ", etc.
+        .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
+        // break if "…something:1." is jammed together
+        .replace(/:\s*(\d+\.)\s/g, ':\n\n$1 ')
+        // edge‑case: single paragraph lists (missed newlines)
+        .replace(/(\d+\.\s)([^\n])/g, '$1$2'); // keeps single spaces
+
+    cleaned = insertListBreaks(cleaned);
+
     // Clean up excessive newlines but preserve paragraph structure
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-    
+
     return cleaned.trim();
   };
 
@@ -1259,10 +1297,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
+  style={{ flex: 1 }}
+  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+>
         {/* Chat Sidebar */}
         <ChatSidebar 
           isVisible={sidebarVisible}
@@ -1329,11 +1367,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
         </View>
         
         <ScrollView
-          style={[
-            styles.scrollView,
-            // Adjust scrollView bottom margin when keyboard is visible
-            { marginBottom: keyboardVisible ? inputHeight + 16 : 65 }
-          ]}
+  style={styles.scrollView}       
           ref={scrollViewRef}
           onScroll={handleScroll}
           scrollEventThrottle={16}
@@ -1366,7 +1400,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
                           styles.userMessageText,
                         ]}
                       >
-                        <Markdown>{msg.content}</Markdown>
+                        <Markdown style={markdownStyles}>{msg.content}</Markdown>
                       </Text>
                     </View>
                   ) : (
@@ -1378,7 +1412,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
                         />
                       </View>
                       <Text style={styles.assistantMessageText}>
-                        <Markdown>{msg.content}</Markdown>
+                        <Markdown style={markdownStyles}>{msg.content}</Markdown>
                       </Text>
                       {msg.thought && (
                         <TouchableOpacity
@@ -1711,10 +1745,6 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 10 : 8,
     paddingTop: 8,
     backgroundColor: COLORS.background,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.05)',
     zIndex: 10, // Ensure it's above the scrollview
