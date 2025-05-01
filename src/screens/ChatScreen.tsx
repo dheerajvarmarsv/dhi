@@ -39,14 +39,19 @@ import { COLORS, FONTS } from '../constants/theme';
 
 // Nice‑looking typographic defaults for Markdown in the chat bubbles
 const markdownStyles: any = {
-  heading1: { fontSize: 20, fontWeight: '700', marginBottom: 8, color: '#333' },
-  heading2: { fontSize: 18, fontWeight: '700', marginBottom: 6, color: '#333' },
-  heading3: { fontSize: 16, fontWeight: '700', marginBottom: 4, color: '#333' },
+  heading1: { fontSize: 20, fontWeight: '700', marginTop: 16, marginBottom: 8, color: '#333' },
+  heading2: { fontSize: 18, fontWeight: '700', marginTop: 12, marginBottom: 6, color: '#333' },
+  heading3: { fontSize: 16, fontWeight: '700', marginTop: 10, marginBottom: 4, color: '#333' },
   paragraph: { fontSize: 16, lineHeight: 22, marginBottom: 8, color: '#333' },
-  list_item: { fontSize: 16, lineHeight: 22, marginBottom: 6, color: '#333' },
-  bullet_list: { marginBottom: 8 },
-  ordered_list: { marginBottom: 8 },
+  list_item: { fontSize: 16, lineHeight: 22, marginBottom: 6, marginLeft: 8, color: '#333' },
+  bullet_list: { marginBottom: 8, marginTop: 8 },
+  ordered_list: { marginBottom: 8, marginTop: 8 },
   strong: { fontWeight: '700' },
+  em: { fontStyle: 'italic' },
+  body: { lineHeight: 22 },
+  // Ensure proper spacing for lists
+  bullet_list_icon: { marginRight: 8, fontSize: 16, lineHeight: 22 },
+  ordered_list_icon: { marginRight: 8, fontSize: 16, lineHeight: 22 },
 };
 import ReminderDialog from '../components/ReminderDialog';
 import ReminderButton from '../components/ReminderButton';
@@ -694,91 +699,116 @@ const ChatScreen = ({ route, navigation }: Props) => {
   };
 
   // Add a helper function to clean up the content - more focused, less aggressive cleaning
-  const cleanupEmotionSections = (content: string): string => {
-    // Store the original content to compare later
-    const originalContent = content;
+// Enhanced cleanupEmotionSections function
+const cleanupEmotionSections = (content: string): string => {
+  // Store the original content to compare later
+  const originalContent = content;
+  
+  // Only remove the most obvious reasoning markers and tags
+  
+  // Remove prompt tags
+  content = content.replace(/<\/?empathy_chain>/g, '');
+  content = content.replace(/<\/?assistant_response>/g, '');
+  content = content.replace(/<\/?think>/g, '');
+  
+  // Remove obvious section headers for reasoning
+  content = content.replace(/^Emotion:.*?\n/g, '');
+  content = content.replace(/^Underlying Factors(?:.*?):\s*\n/g, '');
+  content = content.replace(/^Chosen Approach(?:.*?):\s*\n/g, '');
+  content = content.replace(/^Therapeutic Framing(?:.*?):\s*\n/g, '');
+  content = content.replace(/^Strategy(?:.*?):\s*\n/g, '');
+  
+  // Improve list formatting
+  content = content
+    // For bullet lists: ensure a blank line before "- " when it follows text
+    .replace(/([^\n])\n-\s/g, '$1\n\n- ')
+    // For numbered lists: ensure blank line before "1. ", "2. ", etc. when it follows text
+    .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
+    // Fix jammed lists after headers - ensure a line break after headers
+    .replace(/(#{1,3}\s.+)\n([\-\*]|\d+\.)/g, '$1\n\n$2')
+    // Ensure proper spacing after ordered list number
+    .replace(/(\d+\.)(\S)/g, '$1 $2')
+    // Ensure proper spacing after bullet points
+    .replace(/(\-)(\S)/g, '$1 $2')
+    // Ensure a newline before headers
+    .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
+  
+  // Clean up excessive newlines but preserve paragraph structure
+  content = content.replace(/\n{4,}/g, '\n\n\n');
+  
+  // If we've removed too much, revert to original with minimal cleaning
+  if (content.trim().length < 20 && originalContent.length > 50) {
+    // Just remove the tags but keep the content
+    let simpleCleanup = originalContent;
+    simpleCleanup = simpleCleanup.replace(/<\/?empathy_chain>/g, '');
+    simpleCleanup = simpleCleanup.replace(/<\/?assistant_response>/g, '');
+    simpleCleanup = simpleCleanup.replace(/<\/?think>/g, '');
     
-    // Only remove the most obvious reasoning markers and tags
-    
-    // Remove prompt tags
-    content = content.replace(/<\/?empathy_chain>/g, '');
-    content = content.replace(/<\/?assistant_response>/g, '');
-    content = content.replace(/<\/?think>/g, '');
-    
-    // Remove obvious section headers for reasoning
-    content = content.replace(/^Emotion:.*?\n/g, '');
-    content = content.replace(/^Underlying Factors(?:.*?):\s*\n/g, '');
-    content = content.replace(/^Chosen Approach(?:.*?):\s*\n/g, '');
-    content = content.replace(/^Therapeutic Framing(?:.*?):\s*\n/g, '');
-    content = content.replace(/^Strategy(?:.*?):\s*\n/g, '');
-    
-    // Clean up excessive newlines
-    content = content.replace(/\n{3,}/g, '\n\n');
-    
-    // If we've removed too much, revert to original with minimal cleaning
-    if (content.trim().length < 20 && originalContent.length > 50) {
-      // Just remove the tags but keep the content
-      let simpleCleanup = originalContent;
-      simpleCleanup = simpleCleanup.replace(/<\/?empathy_chain>/g, '');
-      simpleCleanup = simpleCleanup.replace(/<\/?assistant_response>/g, '');
-      simpleCleanup = simpleCleanup.replace(/<\/?think>/g, '');
-      return simpleCleanup.trim();
-    }
-    
-    return content.trim();
-  };
+    // Apply minimal formatting improvements
+    simpleCleanup = simpleCleanup
+      .replace(/([^\n])\n-\s/g, '$1\n\n- ')
+      .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
+      .replace(/\n{4,}/g, '\n\n\n');
+      
+    return simpleCleanup.trim();
+  }
+  
+  return content.trim();
+};
 
   // General purpose function with minimal cleaning to preserve most content
-  const sanitizeAssistantResponse = (content: string): string => {
-    // If compass persona, use specialized cleaning
-    if (selectedPersonaId === 'compass') {
-      return cleanupEmotionSections(content);
-    }
+// Improved sanitizeAssistantResponse function
+const sanitizeAssistantResponse = (content: string): string => {
+  // If compass persona, use specialized cleaning
+  if (selectedPersonaId === 'compass') {
+    return cleanupEmotionSections(content);
+  }
 
-    // For all other personas - minimal cleaning
-    let cleaned = content;
+  // For all other personas - minimal cleaning
+  let cleaned = content;
 
-    // Remove only the most obvious tags
-    cleaned = cleaned.replace(/<\/?think>/g, '');
-    cleaned = cleaned.replace(/<\/?empathy_chain>/g, '');
-    cleaned = cleaned.replace(/<\/?assistant_response>/g, '');
+  // Remove only the most obvious tags
+  cleaned = cleaned.replace(/<\/?think>/g, '');
+  cleaned = cleaned.replace(/<\/?empathy_chain>/g, '');
+  cleaned = cleaned.replace(/<\/?assistant_response>/g, '');
 
-    // Only remove obvious prompt leakage
-    if (cleaned.includes('# Interaction/Personality Configuration Blueprint') ||
-        cleaned.includes('## Core Style Identity & Expertise Profile')) {
-      cleaned = cleaned.replace(/# Interaction\/Personality Configuration Blueprint[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
-    }
+  // Only remove obvious prompt leakage
+  if (cleaned.includes('# Interaction/Personality Configuration Blueprint') ||
+      cleaned.includes('## Core Style Identity & Expertise Profile')) {
+    cleaned = cleaned.replace(/# Interaction\/Personality Configuration Blueprint[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
+  }
 
-    if (cleaned.includes('# Natural Conversation Framework') ||
-        cleaned.includes('## Core Approach')) {
-      cleaned = cleaned.replace(/# Natural Conversation Framework[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
-    }
+  if (cleaned.includes('# Natural Conversation Framework') ||
+      cleaned.includes('## Core Approach')) {
+    cleaned = cleaned.replace(/# Natural Conversation Framework[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
+  }
 
-    // Remove any obvious reasoning marks
-    cleaned = cleaned.replace(/\(reason:.*?\)/g, '');
+  // Remove any obvious reasoning marks
+  cleaned = cleaned.replace(/\(reason:.*?\)/g, '');
 
-    // NEW: strip “Here's a … approach:” style meta lines
-    cleaned = stripMetaPreface(cleaned);
+  // Strip "Here's a … approach:" style meta lines
+  cleaned = stripMetaPreface(cleaned);
 
-    // --- auto‑insert spacing before list items -------------
-    const insertListBreaks = (txt: string) =>
-      txt
-        // bullet lists: ensure a blank line before "- "
-        .replace(/([^\n])\n-\s/g, '$1\n\n- ')
-        // numbered lists: blank line before "1. ", "2. ", etc.
-        .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
-        // break if "…something:1." is jammed together
-        .replace(/:\s*(\d+\.)\s/g, ':\n\n$1 ')
-        // edge‑case: single paragraph lists (missed newlines)
-        .replace(/(\d+\.\s)([^\n])/g, '$1$2'); // keeps single spaces
+  // --- Improve list formatting -------------
+  // Better list formatting - ensure proper spacing before list items
+  cleaned = cleaned
+    // For bullet lists: ensure a blank line before "- " when it follows text
+    .replace(/([^\n])\n-\s/g, '$1\n\n- ')
+    // For numbered lists: ensure blank line before "1. ", "2. ", etc. when it follows text
+    .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
+    // Fix jammed lists after headers - ensure a line break after headers
+    .replace(/(#{1,3}\s.+)\n([\-\*]|\d+\.)/g, '$1\n\n$2')
+    // Ensure proper spacing after ordered list number
+    .replace(/(\d+\.)(\S)/g, '$1 $2')
+    // Ensure proper spacing after bullet points
+    .replace(/(\-)(\S)/g, '$1 $2')
+    // Preserve multiple consecutive line breaks for paragraphs
+    .replace(/\n{4,}/g, '\n\n\n')
+    // Ensure a newline before headers
+    .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
 
-    cleaned = insertListBreaks(cleaned);
-
-    // Clean up excessive newlines but preserve paragraph structure
-    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-
-    return cleaned.trim();
-  };
+  return cleaned.trim();
+};
 
   const stopGeneration = async () => {
     try {
