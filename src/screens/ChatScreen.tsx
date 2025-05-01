@@ -17,6 +17,7 @@ import {
   StatusBar,
   Image,
   AppState,
+  Keyboard,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { initLlama, releaseAllLlama } from 'llama.rn';
@@ -85,6 +86,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const [activeReminderCount, setActiveReminderCount] = useState(0);
   const { hasReminderIntent, reminderMessage, clearReminderIntent } = useReminderDetection(userInput);
 
+  // Add state for keyboard visibility
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
   // Add an appState ref to track app state changes
   const appStateRef = useRef(AppState.currentState);
 
@@ -122,6 +127,31 @@ const ChatScreen = ({ route, navigation }: Props) => {
     const interval = setInterval(checkReminders, 60000); // Check every minute
     
     return () => clearInterval(interval);
+  }, []);
+
+  // Add keyboard event listeners
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardVisible(true);
+        // Store keyboard height for proper spacing
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+        setKeyboardHeight(0);
+      }
+    );
+    
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
   }, []);
   
   const cleanupDuplicateNewChats = async () => {
@@ -1231,7 +1261,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 45 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* Chat Sidebar */}
         <ChatSidebar 
@@ -1299,7 +1329,11 @@ const ChatScreen = ({ route, navigation }: Props) => {
         </View>
         
         <ScrollView
-          style={styles.scrollView}
+          style={[
+            styles.scrollView,
+            // Adjust scrollView bottom margin when keyboard is visible
+            { marginBottom: keyboardVisible ? inputHeight + 16 : 65 }
+          ]}
           ref={scrollViewRef}
           onScroll={handleScroll}
           scrollEventThrottle={16}
@@ -1383,14 +1417,21 @@ const ChatScreen = ({ route, navigation }: Props) => {
           </View>
         </ScrollView>
         
-        <View style={styles.inputContainer}>
+        {/* New input container that stays above keyboard */}
+        <View style={[
+          styles.inputContainer,
+          // Apply different styles based on keyboard visibility
+          keyboardVisible && styles.inputContainerWithKeyboard,
+          // Add bottom padding when keyboard is visible on iOS
+          keyboardVisible && Platform.OS === 'ios' && { paddingBottom: keyboardHeight > 0 ? 10 : 10 }
+        ]}>
           <TextInput
             style={[
               styles.input,
               {
                 height: inputHeight,
                 minHeight: 40,
-                maxHeight: 80
+                maxHeight: keyboardVisible ? 80 : 100
               }
             ]}
             placeholder="Type your message..."
@@ -1454,7 +1495,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1559,7 +1599,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    marginBottom: Platform.OS === 'ios' ? 70 : 65,
+    // Remove the fixed marginBottom - we'll manage this dynamically
   },
   scrollViewContent: {
     flexGrow: 1,
@@ -1663,6 +1703,7 @@ const styles = StyleSheet.create({
     color: COLORS.lightText,
     fontFamily: FONTS.primary,
   },
+  // Updated InputContainer styles
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -1676,6 +1717,18 @@ const styles = StyleSheet.create({
     right: 0,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.05)',
+    zIndex: 10, // Ensure it's above the scrollview
+  },
+  // Add style for when keyboard is visible
+  inputContainerWithKeyboard: {
+    backgroundColor: COLORS.background,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 8, // Less padding when keyboard is visible
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   input: {
     flex: 1,

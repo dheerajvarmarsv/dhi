@@ -451,7 +451,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
       {
         translateY: animatedValue.interpolate({
           inputRange: [0, 1],
-          outputRange: [300, 0],
+          outputRange: [100, 0],
         }),
       },
     ],
@@ -555,10 +555,11 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
       animationType="none"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
+<KeyboardAvoidingView
+  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  style={styles.container}
+  keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+>
         <SafeAreaView style={styles.safeContainer}>
           <View style={styles.backdrop}>
             <TouchableOpacity style={styles.backdropTouch} onPress={onClose} />
@@ -577,9 +578,12 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
               </View>
               
               <ScrollView 
-                contentContainerStyle={styles.content}
-                showsVerticalScrollIndicator={false}
-              >
+  contentContainerStyle={styles.content}
+  showsVerticalScrollIndicator={true}
+  bounces={false}
+  alwaysBounceVertical={false}
+  keyboardShouldPersistTaps="handled"
+>
                 <View style={styles.sectionContainer}>
                   <Text style={styles.label}>What to remember?</Text>
                   <TextInput
@@ -597,14 +601,16 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                   <Text style={styles.label}>When?</Text>
                   <View style={styles.datePickerOuterContainer}>
                     {Platform.OS === 'ios' ? (
-                      <DateTimePicker
-                        value={date}
-                        mode="datetime"
-                        display="spinner"
-                        onChange={handleDateChange}
-                        minimumDate={new Date()}
-                        style={styles.iosDatePicker}
-                      />
+                        <DateTimePicker
+  value={date}
+  mode="datetime"
+  display="spinner"
+  onChange={handleDateChange}
+  minimumDate={new Date()}
+  style={styles.iosDatePicker}
+  textColor={COLORS.text} // Add this line to fix text color
+  themeVariant="light" // Add this to ensure light theme with dark text
+/>
                     ) : (
                       <TouchableOpacity 
                         style={styles.dateSelector} 
@@ -1046,11 +1052,13 @@ const styles = StyleSheet.create({
   },
   dialogContainer: {
     width: width > 500 ? 450 : width * 0.92,
-    maxHeight: height * 0.85,
+    maxHeight: Math.min(650, height * 0.85),
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     overflow: 'hidden',
     ...SHADOWS.medium,
+    marginTop: 'auto',
+    marginBottom: 'auto',
   },
   sectionContainer: {
     marginBottom: 24,
@@ -1124,6 +1132,7 @@ const styles = StyleSheet.create({
   iosDatePicker: {
     height: 180,
     width: '100%',
+    color: COLORS.text
   },
   dateSelector: {
     borderWidth: 1,
