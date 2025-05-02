@@ -20,6 +20,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MODEL_FILENAME, MODEL_REPO } from '../utils/modelUtils';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, FONTS } from '../constants/theme';
+import PrivacyCheckbox from '../components/PrivacyCheckbox';
+import PrivacyLinks from '../components/PrivacyLinks';
 
 const { width, height } = Dimensions.get('window');
 
@@ -37,6 +39,7 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [isModelDownloaded, setIsModelDownloaded] = useState<boolean>(false);
+  const [privacyAgreed, setPrivacyAgreed] = useState<boolean>(false);
   
   // Animation values
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -206,6 +209,15 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
   };
 
   const handleDownload = async () => {
+    if (!privacyAgreed) {
+      Alert.alert(
+        'Agreement Required',
+        'Please agree to the Privacy Policy and Terms & Conditions to continue.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setIsDownloading(true);
     setProgress(0);
 
@@ -392,24 +404,39 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
             <Text style={styles.downloadingSubtext}>Keep the app open while I load my knowledge!</Text>
           </View>
         ) : (
-          isModelDownloaded ? (
-            <TouchableOpacity style={styles.chatButton} onPress={handleModelSelection}>
-              <View style={styles.downloadButtonContent}>
-                <Text style={styles.buttonText}>Let's Chat</Text>
-                <Text style={styles.downloadSize}>I'm ready to assist you</Text>
-              </View>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.button, { opacity: isDownloading ? 0.5 : 1 }]}
-              onPress={handleDownload}
-              disabled={isDownloading}
-            >
-              <Text style={styles.buttonText}>
-                {isDownloading ? 'Downloading...' : "I'm ready to assist you"}
-              </Text>
-            </TouchableOpacity>
-          )
+          <>
+            {!isModelDownloaded && (
+              <PrivacyCheckbox 
+                checked={privacyAgreed} 
+                onCheck={setPrivacyAgreed} 
+              />
+            )}
+            
+            {isModelDownloaded ? (
+              <>
+                <TouchableOpacity style={styles.chatButton} onPress={handleModelSelection}>
+                  <View style={styles.downloadButtonContent}>
+                    <Text style={styles.buttonText}>Let's Chat</Text>
+                    <Text style={styles.downloadSize}>I'm ready to assist you</Text>
+                  </View>
+                </TouchableOpacity>
+                <PrivacyLinks containerStyle={styles.privacyLinks} />
+              </>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.button, 
+                  { opacity: isDownloading || !privacyAgreed ? 0.5 : 1 }
+                ]}
+                onPress={handleDownload}
+                disabled={isDownloading || !privacyAgreed}
+              >
+                <Text style={styles.buttonText}>
+                  {isDownloading ? 'Downloading...' : "I'm ready to assist you"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
         
         {!isDownloading && !isModelDownloaded && (
@@ -673,6 +700,9 @@ const styles = StyleSheet.create({
     marginTop: height * 0.02,
     maxWidth: width * 0.8,
     fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif',
+  },
+  privacyLinks: {
+    marginTop: 10,
   }
 });
 
