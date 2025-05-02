@@ -66,6 +66,39 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
       /\bremember\b.*?\bin\b/i,             // "Remember to X in Y time"
       /\breminder\b.*?\bin\b/i,             // "Reminder to X in Y time"
       /\bremind\s+(?:me|us)?\s+(?:in|at)\s+\d+/i, // "Remind in X" or "Remind at X"
+      // Add standalone "reminder" detection
+      /\breminder\b/i,                      // Just the word "reminder" by itself
+      /\breminders?\b/i,                    // Both singular and plural forms
+      /\bnew reminder\b/i,                  // Common phrase "new reminder"
+      /\badd (?:a|an|this) reminder\b/i,    // "Add a reminder"
+      /\breminder about\b/i,                // "Reminder about X"
+      /\badd this to (?:my|the) reminders\b/i, // "Add this to my reminders"
+      // Additional reminder patterns
+      /\bto do list\b/i,                    // "Create a to do list" or "Add to my to do list"
+      /\bcreate (?:a|an) to do list\b/i,
+      /\badd to (?:my|our) to do list\b/i,
+      /\bcreate (?:a|an) checklist\b/i,
+      /\badd to (?:my|our) checklist\b/i,
+      /\btask list\b/i,
+      /\btasks for\b/i,
+      /\bappointment\b/i,                   // "Set an appointment" or "I have an appointment"
+      /\bschedule (?:a|an)\b/i,             // "Schedule a meeting"
+      /\bmeeting with\b/i,
+      /\breserve (?:a|an)\b/i,
+      /\bbook (?:a|an)\b/i,
+      /\btodo\b/i,                          // Catch "todo" even without spaces
+      /\btodolist\b/i,                      // Catch "todolist" without spaces
+      /\btodo list\b/i,                     // And with spaces
+      /\bto-do\b/i,                         // With hyphen
+      /\bto-do list\b/i,
+      /\btask reminder\b/i,
+      /\bcalendar\b.*?\bevent\b/i,          // "Add calendar event"
+      /\broadd (?:a|an) event to\b/i,       // "Add an event to calendar"
+      /\bput.*\bon my calendar\b/i,         // "Put X on my calendar"
+      /\bschedule\b.*?\bfor\b/i,            // "Schedule X for Friday"
+      /\b(?:set|create|make|add) (?:a|an) note\b/i, // "Create a note to..."
+      /\bmark (?:a|the) date\b/i,           // "Mark the date for..."
+      /\balarm\b.*?\bfor\b/i,               // "Set an alarm for..."
     ];
     
     // If any direct pattern matches, this is almost certainly a reminder request
@@ -374,7 +407,6 @@ function correctSpellingMistakes(input: string): string {
     'shedule': 'schedule',
     'schdule': 'schedule',
     'schdul': 'schedule',
-    'scedule': 'schedule',
     'sheduled': 'scheduled',
     'tomorow': 'tomorrow',
     'tommorow': 'tomorrow',
@@ -400,6 +432,64 @@ function correctSpellingMistakes(input: string): string {
     'exercize': 'exercise',
     'exercse': 'exercise',
     'excercise': 'exercise',
+    // Additional corrections for common mistakes
+    'remindin': 'reminding',
+    'remindme': 'remind me',
+    'todo': 'to do',
+    'todolist': 'to do list',
+    'to-do': 'to do',
+    'to-do-list': 'to do list',
+    '2do': 'to do',
+    'rmnd': 'remind',
+    'rmind': 'remind',
+    'remidn': 'remind',
+    'notifi': 'notify',
+    'notifie': 'notify',
+    'notfy': 'notify',
+    'notfiy': 'notify',
+    'apointment': 'appointment',
+    'appointmnt': 'appointment',
+    'apptmt': 'appointment',
+    'appt': 'appointment',
+    'appoinmnt': 'appointment',
+    'appntmnt': 'appointment',
+    'appoinment': 'appointment',
+    'apoint': 'appointment',
+    'apt': 'appointment',
+    'mtg': 'meeting',
+    'meetng': 'meeting',
+    'meetin': 'meeting',
+    'meating': 'meeting',
+    'scedule': 'schedule',
+    'shcedule': 'schedule',
+    'checlist': 'checklist',
+    'chcklst': 'checklist',
+    'checkist': 'checklist',
+    'cehcklist': 'checklist',
+    'don\'t forget': "don't forget",
+    'dont forget': "don't forget",
+    'dnt forget': "don't forget",
+    'dont 4get': "don't forget",
+    'csn': 'can',
+    'kn': 'can',
+    'cn': 'can',
+    // Additional reminder spelling variations
+    'remindar': 'reminder',
+    'remunder': 'reminder',
+    'remaindar': 'reminder',
+    'reminer': 'reminder',
+    'remindur': 'reminder',
+    'remindder': 'reminder',
+    'remindir': 'reminder',
+    'remindor': 'reminder',
+    'reminderr': 'reminder',
+    'riminder': 'reminder',
+    'rimainder': 'reminder',
+    'rimender': 'reminder',
+    'remaynder': 'reminder',
+    'rmainder': 'reminder',
+    'rmndr': 'reminder',
+    'remider': 'reminder',
   };
   
   // Prepare input for processing
@@ -416,6 +506,22 @@ function correctSpellingMistakes(input: string): string {
       const regex = new RegExp(`\\b${word}\\b`, 'i');
       corrected = corrected.replace(regex, corrections[word]);
     }
+  }
+  
+  // Check for common phrase patterns (non-word-boundary specific)
+  for (const [mistake, correction] of Object.entries(corrections)) {
+    if (mistake.includes(' ') || mistake.length > 5) {
+      // For longer phrases or multi-word phrases, do a direct check
+      const regex = new RegExp(mistake, 'i');
+      if (regex.test(corrected)) {
+        corrected = corrected.replace(regex, correction);
+      }
+    }
+  }
+  
+  // Special case for "todo" which might be part of other words
+  if (/\btodo\b/i.test(corrected) || /\bto-do\b/i.test(corrected)) {
+    corrected = corrected.replace(/\btodo\b/gi, 'to do').replace(/\bto-do\b/gi, 'to do');
   }
   
   return corrected;

@@ -37,52 +37,69 @@ const BubblesScreen: React.FC<BubblesScreenProps> = ({ headerImage, featureCards
   
   // Set up the floating animation
   useEffect(() => {
-    // Animation config
+    // Animation config - increased duration and better easing for smoother movement
     const animationConfig = {
-      duration: 3000,
-      easing: Easing.inOut(Easing.ease),
+      duration: 5000, // Increased from 3000 to 5000 for smoother motion
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Using cubic bezier for more natural movement
       useNativeDriver: true
     };
     
-    // Animate each bubble with a small random movement
+    // Animate each bubble with a smoother random movement
     const animations = animatedValues.map((anim, index) => {
-      // Random small movement (5-15px)
-      const moveX = 10 * anim.direction.x * (0.5 + Math.random());
-      const moveY = 10 * anim.direction.y * (0.5 + Math.random());
+      // Smoother and smaller movement (3-8px instead of 5-15px)
+      const moveX = 5 * anim.direction.x * (0.5 + Math.random());
+      const moveY = 5 * anim.direction.y * (0.5 + Math.random());
       
+      // Use chained sequences for smoother transitions
       return Animated.parallel([
-        Animated.sequence([
-          Animated.timing(anim.translateX, {
-            toValue: moveX,
-            ...animationConfig,
-          }),
-          Animated.timing(anim.translateX, {
-            toValue: 0,
-            ...animationConfig,
-          })
-        ]),
-        Animated.sequence([
-          Animated.timing(anim.translateY, {
-            toValue: moveY,
-            ...animationConfig,
-          }),
-          Animated.timing(anim.translateY, {
-            toValue: 0,
-            ...animationConfig,
-          })
-        ])
+        Animated.loop(
+          Animated.sequence([
+            // Move outward
+            Animated.timing(anim.translateX, {
+              toValue: moveX,
+              ...animationConfig,
+            }),
+            // Move back to center with different timing for asymmetric feel
+            Animated.timing(anim.translateX, {
+              toValue: 0,
+              duration: 5500, // Slightly different duration for natural feel
+              easing: Easing.bezier(0.42, 0, 0.58, 1), // Different easing for return motion
+              useNativeDriver: true
+            })
+          ]), 
+          { iterations: -1 } // Infinite loop
+        ),
+        Animated.loop(
+          Animated.sequence([
+            // Move outward
+            Animated.timing(anim.translateY, {
+              toValue: moveY,
+              ...animationConfig,
+            }),
+            // Move back to center with different timing
+            Animated.timing(anim.translateY, {
+              toValue: 0,
+              duration: 5500, // Slightly different duration for natural feel
+              easing: Easing.bezier(0.42, 0, 0.58, 1), // Different easing for return motion
+              useNativeDriver: true
+            })
+          ]),
+          { iterations: -1 } // Infinite loop
+        )
       ]);
     });
     
-    // Run all animations in parallel and loop
-    const loopAnimations = Animated.loop(
-      Animated.stagger(200, animations)
+    // Run all animations in parallel with staggered starts for natural look
+    const staggeredAnimations = Animated.stagger(
+      300, // Increased from 200 to 300 to space out animations more
+      animations
     );
     
-    loopAnimations.start();
+    staggeredAnimations.start();
     
     return () => {
-      loopAnimations.stop();
+      // Stop all animations on unmount
+      animations.forEach(anim => anim.stop && anim.stop());
     };
   }, []);
 

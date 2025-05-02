@@ -169,7 +169,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const [context, setContext] = useState<any>(null);
   const [conversation, setConversation] = useState<Message[]>(INITIAL_CONVERSATION);
   const [userInput, setUserInput] = useState<string>('');
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState<string | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isFetchingResponse, setIsFetchingResponse] = useState(false);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>('general');
   const [personaSelectorVisible, setPersonaSelectorVisible] = useState<boolean>(false);
@@ -541,8 +544,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
     // Store the original content to compare later
     const originalContent = content;
     
-    // Only remove the most obvious reasoning markers and tags
-    
     // Remove prompt tags
     content = content.replace(/<\/?empathy_chain>/g, '');
     content = content.replace(/<\/?assistant_response>/g, '');
@@ -554,6 +555,29 @@ const ChatScreen = ({ route, navigation }: Props) => {
     content = content.replace(/^Chosen Approach(?:.*?):\s*\n/g, '');
     content = content.replace(/^Therapeutic Framing(?:.*?):\s*\n/g, '');
     content = content.replace(/^Strategy(?:.*?):\s*\n/g, '');
+    
+    // Fix doubled-up list markers - this is a key issue in the screenshots
+    content = content.replace(/^\s*[\*\-•]\s*[\*\-•]\s*/gm, '* ');
+    content = content.replace(/^\s*\d+\.\s*[\*\-•]\s*/gm, '$1. ');
+    
+    // Fix list point with extra bullet points inside
+    content = content.replace(/^(\s*[\*\-•]\s+)[\*\-•]\s+/gm, '$1');
+    content = content.replace(/^(\s*\d+\.\s+)[\*\-•]\s+/gm, '$1');
+    
+    // Fix nested lists with improper formatting
+    content = content.replace(/^(\s*)([\*\-•])\s*:\s*/gm, '$1$2 ');
+    
+    // Clean up asterisks that might be mistaken for bullets in the middle of text
+    content = content.replace(/(\S)\s*\*\s*(\S)/g, '$1 * $2');
+    
+    // Fix issues with lines that start with periods being confused as list items
+    content = content.replace(/^(\s*)\.(\s+)/gm, '$1•$2');
+
+    // Clean up extra bullets at the beginning of paragraphs
+    content = content.replace(/^(\s*)[\*\-•]+\s*:\s*/gm, '$1');
+    
+    // Fix the format for ordered lists where the ordered number is followed by a bullet
+    content = content.replace(/^(\s*)(\d+)[\.\)]\s*[\*\-•]\s*/gm, '$1$2. ');
     
     // --- Ensure newline before list markers that are jammed up against prior text ---
     content = content
@@ -582,6 +606,12 @@ const ChatScreen = ({ route, navigation }: Props) => {
       // Ensure a newline before headers
       .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
     
+    // Remove the weird "." bullet points seen in the screenshot
+    content = content.replace(/^\s*\.\s+/gm, '• ');
+    
+    // Fix split sentences that should continue on same line (when not part of a list)
+    content = content.replace(/([a-z,;])$\n^\s*([a-z])/gm, '$1 $2');
+    
     // Clean up excessive newlines but preserve paragraph structure
     content = content.replace(/\n{4,}/g, '\n\n\n');
     
@@ -606,126 +636,72 @@ const ChatScreen = ({ route, navigation }: Props) => {
   };
 
   // General purpose function with minimal cleaning to preserve most content
-  // Improved sanitizeAssistantResponse function
+  // Improved sanitizeAssistantResponse function with minimal cleaning
   const sanitizeAssistantResponse = (content: string): string => {
-    // If compass persona, use specialized cleaning
-    if (selectedPersonaId === 'compass') {
-      return cleanupEmotionSections(content);
+    // Skip sanitization if content is empty
+    if (!content || content.trim() === '') {
+      return '';
     }
 
-    // For all other personas - enhanced cleaning
+    // For all personas - use minimal cleaning to preserve formatting
     let cleaned = content;
 
-    // Remove any context-related system instructions with stronger pattern matching
+    // Only remove essential system instructions (be more conservative)
     const systemInstructionPatterns = [
-      /Remember (?:the )?context from (?:our|the) (?:earlier|previous) messages.*/gi,
-      /Your response should be coherent with the ongoing discussion.*/gi,
-      /Maintaining the context from our (?:earlier|previous) conversation.*/gi,
-      /Remember what we discussed earlier.*/gi,
-      /Based on (?:our|the) previous conversation.*/gi,
-      /Continuing from (?:our|the) previous messages.*/gi,
-      /Taking into account our entire conversation so far.*/gi,
-      /A500-calorie diet is extremely low.*/gi,
-      /Remember the context from our earlier messages in this conversation.*/gi,
-      /Remember the context from our earlier messages:.*/gi,
-      /.*A\d+-calorie diet.*/gi
+      /Remember (?:the )?context from (?:our|the) (?:earlier|previous) messages in this conversation\./gi,
+      /IMPORTANT SYSTEM INSTRUCTION \(DO NOT REPEAT OR MENTION\):.*/gi,
     ];
 
-    // Apply each pattern to clean the content
+    // Apply only the most critical patterns to clean the content
     systemInstructionPatterns.forEach(pattern => {
       cleaned = cleaned.replace(pattern, '');
     });
 
-    // More aggressively clean numeric-prefixed sentences that look like context reminders
-    cleaned = cleaned.replace(/\d+\.\s*Remember the context.*/gi, '');
-    cleaned = cleaned.replace(/\d+\.\s*Based on our previous.*/gi, '');
-    
-    // Remove system instruction phrases that might be missed by regexes
-    const systemInstructionPhrases = [
-      "Remember the context from our earlier messages",
-      "Remember the context from our earlier messages in this conversation",
-      "Your response should be coherent with the ongoing discussion",
-      "Maintaining the context from our earlier conversation",
-      "Remember what we discussed earlier",
-      "Based on our previous conversation",
-      "Continuing from our previous messages",
-      "Taking into account our entire conversation so far",
-      "A 500-calorie diet is extremely low",
-      "Remember the context from our earlier messages:",
-      "13. Remember the context"
-    ];
-
-    // Remove exact phrases
-    systemInstructionPhrases.forEach(phrase => {
-      cleaned = cleaned.replace(new RegExp(phrase, 'gi'), '');
-    });
-
-    // Remove only the most obvious tags
+    // Only remove obvious tags
     cleaned = cleaned.replace(/<\/?think>/g, '');
     cleaned = cleaned.replace(/<\/?empathy_chain>/g, '');
     cleaned = cleaned.replace(/<\/?assistant_response>/g, '');
 
-    // Only remove obvious prompt leakage
-    if (cleaned.includes('# Interaction/Personality Configuration Blueprint') ||
-        cleaned.includes('## Core Style Identity & Expertise Profile')) {
+    // Only remove obvious prompt leakage, be conservative
+    if (cleaned.includes('# Interaction/Personality Configuration Blueprint')) {
       cleaned = cleaned.replace(/# Interaction\/Personality Configuration Blueprint[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
     }
 
-    if (cleaned.includes('# Natural Conversation Framework') ||
-        cleaned.includes('## Core Approach')) {
-      cleaned = cleaned.replace(/# Natural Conversation Framework[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
+    // Fix some obvious formatting issues
+
+    // 1. Fix Markdown list formatting
+    // Ensure proper spacing for bullet lists
+    cleaned = cleaned.replace(/^(\s*?)[-*•]\s*(?=\S)/gm, '$1• ');
+    
+    // Ensure proper spacing for numbered lists
+    cleaned = cleaned.replace(/^(\s*?)(\d+)\.\s*(?=\S)/gm, '$1$2. ');
+    
+    // 2. Fix newlines and paragraph spacing - preserve author's intent for breaks
+    
+    // Ensure paragraphs have appropriate spacing (don't merge paragraphs)
+    cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
+    
+    // Ensure headers have a newline before them when following text
+    cleaned = cleaned.replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
+    
+    // Fix common $ symbol artifacts that appear before bullets (seen in screenshots)
+    cleaned = cleaned.replace(/^\s*\$\s*$/gm, '');
+    
+    // Strip "Here's a … approach:" style meta lines but be conservative
+    if (/^Here['']s ([a-z\s]+) approach:/i.test(cleaned)) {
+      cleaned = stripMetaPreface(cleaned);
     }
 
     // Remove any obvious reasoning marks
     cleaned = cleaned.replace(/\(reason:.*?\)/g, '');
-
-    // Strip "Here's a … approach:" style meta lines
-    cleaned = stripMetaPreface(cleaned);
-
-    // --- Improve list formatting -------------
-    // Better list formatting - ensure proper spacing before list items
-    cleaned = cleaned
-      // For bullet lists: ensure a blank line before "- " when it follows text
-      .replace(/([^\n])\n-\s/g, '$1\n\n- ')
-      // For numbered lists: ensure blank line before "1. ", "2. ", etc. when it follows text
-      .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
-      // Fix jammed lists after headers - ensure a line break after headers
-      .replace(/(#{1,3}\s.+)\n([\-\*]|\d+\.)/g, '$1\n\n$2')
-      // Ensure proper spacing after ordered list number
-      .replace(/(\d+\.)(\S)/g, '$1 $2')
-      // Ensure proper spacing after bullet points
-      .replace(/(\-)(\S)/g, '$1 $2')
-      // Fix multiple bullet points without proper spacing
-      .replace(/(\n\s*-\s[^\n]+)(\n\s*-\s)/g, '$1\n$2')
-      // Fix multiple numbered points without proper spacing
-      .replace(/(\n\s*\d+\.\s[^\n]+)(\n\s*\d+\.\s)/g, '$1\n$2')
-      // Preserve multiple consecutive line breaks for paragraphs
-      .replace(/\n{4,}/g, '\n\n\n')
-      // Ensure a newline before headers
-      .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
-
-    // --- Ensure newline before list markers that are jammed up against prior text ---
-    cleaned = cleaned
-      // bullets using * or - or • even when there is *no* space after the marker
-      .replace(/([^\n])\s*\*\s*/g, '$1\n\n* ')
-      .replace(/([^\n])\s*-\s*/g, '$1\n\n- ')
-      .replace(/([^\n])\s*•\s*/g, '$1\n\n• ')
-      // ordered list numbers like 1 2 3 that have NO '.' yet (detected when a capital
-      // letter follows the number).  We inject a period and a double newline.
-      .replace(/([^\n])\s*(\d{1,2})\s+(?=[A-Z])/g, '$1\n\n$2. ')
-      // ordered list numbers that *do* have '.' or ')' already
-      .replace(/([^\n])\s*(\d{1,2}[.)])\s*/g, '$1\n\n$2 ');
-
-    // Clean up leading/trailing punctuation that might remain after cleaning
+    
+    // Clean up leading/trailing punctuation
     cleaned = cleaned.replace(/^[.,:;\s]+/, '');
     cleaned = cleaned.replace(/[.,:;\s]+$/, '');
     
-    // Handle any awkward double-spaces or extra spaces
-    cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\n\s\n/g, '\n\n');
+    // Fix sentences broken across multiple lines/bullets when obvious
+    cleaned = cleaned.replace(/(\b[a-z][a-z.]{0,2})$\n^\s*([a-z])/gm, '$1 $2');
     
-    // Remove consecutive line breaks at the start or end
-    cleaned = cleaned.replace(/^\n+/, '').replace(/\n+$/, '');
-
     return cleaned.trim();
   };
 
@@ -762,7 +738,12 @@ const ChatScreen = ({ route, navigation }: Props) => {
     const updatedConversation = [...conversation, newUserMessage];
     setConversation(updatedConversation);
     setUserInput('');
+    
+    // Set up the initial loading state - model is thinking
+    setIsFetchingResponse(true);   // Initial fetch - just thinking, no tokens yet
     setIsGenerating(true);
+    setIsStreaming(false);
+    setStreamingMessage(null);
     setAutoScrollEnabled(true);
 
     try {
@@ -808,6 +789,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       let currentThought = '';
       let inThinkBlock = false;
       let inEmpathyChain = false;
+      let hasReceivedFirstToken = false;
       
       interface CompletionData {
         token: string;
@@ -832,6 +814,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
           },
           (data: CompletionData) => {
             const token = data.token;
+            
+            // If this is the first token, transition from "thinking" to "streaming"
+            if (!hasReceivedFirstToken) {
+              setIsFetchingResponse(false);  // No longer just thinking
+              setIsStreaming(true);          // Now we're streaming tokens
+              hasReceivedFirstToken = true;
+            }
+            
+            // Update the full message
             currentAssistantMessage += token;
             
             // Handle Dhi Compass specific format with empathy_chain
@@ -876,10 +867,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
               }
             }
 
-            // Only add visible content that isn't part of thought process
+            // Only show streaming tokens that aren't part of thought process
             if (!inEmpathyChain && !inThinkBlock) {
-              // We'll only create the message once we're done generating
-              currentAssistantMessage = sanitizeAssistantResponse(currentAssistantMessage);
+              // Update streaming message that's displayed to user
+              setStreamingMessage(sanitizeAssistantResponse(currentAssistantMessage));
             }
 
             if (autoScrollEnabled && scrollViewRef.current) {
@@ -889,6 +880,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
             }
           }
         );
+        
+        // Reset streaming state once generation is complete
+        setStreamingMessage(null);
+        setIsStreaming(false);
         
         // Once generation is complete, add the assistant message to the conversation
         setConversation(prev => [
@@ -942,15 +937,21 @@ const ChatScreen = ({ route, navigation }: Props) => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Alert.alert('Error During Inference', errorMessage);
     } finally {
+      // Reset all states once everything is done
       setIsGenerating(false);
+      setIsFetchingResponse(false);
+      setIsStreaming(false);
     }
   };
 
-  // Update stopGeneration to work properly with the new approach
+  // Update stopGeneration to clean up streaming states
   const stopGeneration = async () => {
     try {
       await context.stopCompletion();
+      setIsStreaming(false);
+      setIsFetchingResponse(false);
       setIsGenerating(false);
+      setStreamingMessage(null);
     } catch (error) {
       console.error('Error stopping completion:', error);
     }
@@ -1670,10 +1671,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
                 </View>
               ))}
               
-              {/* Show thinking indicator only when generating and no message is being added yet */}
-              {isGenerating && (
+              {/* Show thinking indicator only when fetching but not yet streaming */}
+              {isFetchingResponse && !isStreaming && (
                 <View style={styles.messageWrapper}>
-                  <View style={styles.assistantMessageContainer}>
+                  <View style={styles.loadingMessageContainer}>
                     <View style={styles.assistantHeader}>
                       <Image 
                         source={getImageSource(selectedPersona.iconPath)}
@@ -1693,10 +1694,27 @@ const ChatScreen = ({ route, navigation }: Props) => {
                 </View>
               )}
               
+              {/* Show streaming message when tokens are coming */}
+              {isStreaming && streamingMessage !== null && (
+                <View style={styles.messageWrapper}>
+                  <View style={styles.assistantMessageContainer}>
+                    <View style={styles.assistantHeader}>
+                      <Image 
+                        source={getImageSource(selectedPersona.iconPath)}
+                        style={styles.assistantIcon}
+                      />
+                    </View>
+                    <Text style={styles.assistantMessageText}>
+                      <Markdown style={markdownStyles}>{streamingMessage}</Markdown>
+                    </Text>
+                  </View>
+                </View>
+              )}
+              
               {!context && (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={COLORS.primary} />
-                  <Text style={styles.loadingText}>Loading model...</Text>
+                  <Text style={styles.loadingText}>Loading Dhi...</Text>
                 </View>
               )}
             </View>

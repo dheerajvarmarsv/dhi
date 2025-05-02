@@ -271,42 +271,42 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
       featureCards: [
         { 
           image: require('../../../assets/readwrite.png'), 
-          text: 'Summarize content',
+          text: 'Summarizer',
           bgColor: COLORS.featureCardBg1
         },
         { 
-          image: require('../../../assets/reminder.png'), 
-          text: 'Make a plan',
+          image: require('../../../assets/ideas.png'), 
+          text: 'Reminder',
           bgColor: COLORS.featureCardBg2
         },
         { 
           image: require('../../../assets/analyse.png'), 
-          text: 'Learn something new',
+          text: 'Guide',
           bgColor: COLORS.featureCardBg3
         },
         { 
           image: require('../../../assets/write.png'), 
-          text: 'Read a story',
+          text: 'Storyteller',
           bgColor: COLORS.featureCardBg4
         },
         { 
           image: require('../../../assets/ideas.png'), 
-          text: 'Generate ideas',
+          text: 'Financial Advisor',
           bgColor: COLORS.featureCardBg3
         },
         { 
           image: require('../../../assets/understand.png'), 
-          text: 'Help understand',
+          text: 'Fitness Coach',
           bgColor: COLORS.featureCardBg5
         },
         { 
           image: require('../../../assets/calculate.png'), 
-          text: 'Assist with math',
+          text: 'Coder',
           bgColor: COLORS.featureCardBg2
         },
         { 
           image: require('../../../assets/justtalkorvent.png'), 
-          text: 'Just talk or vent',
+          text: 'Wellness Coach',
           bgColor: COLORS.featureCardBg1
         }
       ],
