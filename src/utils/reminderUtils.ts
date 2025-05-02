@@ -7,6 +7,9 @@ import RNFS from 'react-native-fs';
 import { v4 as uuidv4 } from 'uuid';
 import Sound from 'react-native-sound';
 
+// Required to enable sound playback
+Sound.setCategory('Playback');
+
 // Define the reminder structure
 export interface Reminder {
   id: string;
@@ -67,126 +70,63 @@ export const initializeSound = () => {
 
 // Play reminder sound
 export const playReminderSound = () => {
-  try {
-    // Just use system sound for now
-    if (Platform.OS === 'ios') {
-      PushNotificationIOS.presentLocalNotification({
-        alertTitle: '',
-        alertBody: '',
-        soundName: 'default',
-      });
-    } else {
-      // For Android, use the vibration pattern
-      Vibration.vibrate([0, 100, 100, 100]);
+  // Enable playback in silent mode
+  Sound.setCategory('Playback');
+  
+  // Load the sound file
+  const sound = new Sound('notification.mp3', Sound.MAIN_BUNDLE, (error) => {
+    if (error) {
+      console.error('Failed to load the sound', error);
+      return;
     }
-  } catch (error) {
-    console.error('Sound playback failed:', error);
-  }
+    
+    // Play the sound
+    sound.play((success) => {
+      if (!success) {
+        console.error('Playback failed due to audio decoding errors');
+      }
+      // Release when played
+      sound.release();
+    });
+  });
 };
 
-// Schedule a local notification
+// Schedule a local notification for a reminder
 export const scheduleLocalNotification = (reminder: Reminder) => {
   try {
-    const channelId = reminder.todoList 
-      ? 'todo-reminders-channel' 
-      : (reminder.recurrence 
-        ? 'recurring-reminders-channel' 
-        : (reminder.priority === 'high' 
-          ? 'important-reminders-channel' 
-          : 'reminders-channel'));
-    
-    // Set title based on reminder type
-    let title = '🔔 Reminder';
-    if (reminder.todoList) {
-      title = '📋 To-Do List';
-    } else if (reminder.recurrence) {
-      title = '🔄 Recurring Reminder';
+    if (!reminder.soundEnabled) {
+      return;
     }
     
-    // Add priority icon to title
-    if (reminder.priority === 'high') {
-      title = `❗ ${title}`;
-    } else if (reminder.priority === 'medium') {
-      title = `⚠️ ${title}`;
-    } else {
-      title = `ℹ️ ${title}`;
-    }
-    
-    // Create rich message with formatting
-    let message = reminder.text;
-    
-    // For todo lists, format items
-    if (reminder.todoList && reminder.todoList.items.length > 0) {
-      message = `${reminder.text}\n\n📋 Tasks:\n`;
-      reminder.todoList.items.forEach((item, index) => {
-        message += `\n${item.isCompleted ? '✓' : '○'} ${item.text}`;
-      });
-      message += '\n\n⏱️ Due: ' + formatReminderTime(reminder.timestamp);
-    } else {
-      if (!reminder.todoList) {
-        message += '\n\n━━━━━━━━━━━━━━━━━';
-      }
-      message += `\n\n⏱️ Due: ${formatReminderTime(reminder.timestamp)}`;
-    }
-    
-    // Add priority indicator with more descriptive text
-    const priorityInfo = {
-      'low': { icon: 'ℹ️', text: 'Low priority - can be done when convenient' },
-      'medium': { icon: '⚠️', text: 'Medium priority - please attend soon' },
-      'high': { icon: '❗', text: 'High priority - urgent attention needed' }
-    };
-    
-    message += `\n${priorityInfo[reminder.priority].icon} ${priorityInfo[reminder.priority].text}`;
-
-    // Select the appropriate sound file based on priority
-    let soundName = 'default';
-    if (reminder.soundEnabled) {
-      switch (reminder.priority) {
-        case 'high':
-          soundName = 'notification3.mp3';
-          break;
-        case 'medium':
-          soundName = 'notification2.mp3';
-          break;
-        case 'low':
-          soundName = 'notification.mp3';
-          break;
-        default:
-          soundName = 'default';
-      }
-    }
-
-    // Make sure notification shows up even when app is in foreground
-    PushNotification.localNotificationSchedule({
-      id: reminder.id,
-      channelId: channelId,
-      title: title,
-      message: message,
-      date: new Date(reminder.timestamp),
-      allowWhileIdle: true,
-      playSound: reminder.soundEnabled,
-      soundName: soundName,
-      vibrate: true,
-      priority: reminder.priority === 'high' ? 'high' : 'default',
-      visibility: 'public',
-      ignoreInForeground: false, // Important - show notification even when app is open
-      userInfo: {
-        soundEnabled: reminder.soundEnabled ? 'true' : 'false',
-        priority: reminder.priority,
+    if (Platform.OS === 'ios') {
+      // For iOS
+      PushNotificationIOS.addNotificationRequest({
         id: reminder.id,
-        isRecurring: reminder.recurrence ? 'true' : 'false',
-        isTodoList: reminder.todoList ? 'true' : 'false'
-      },
-      tag: reminder.priority,
-      // Don't set a fixed number, allow the OS to manage badge counts
-      smallIcon: reminder.todoList ? 'ic_todo' : (reminder.recurrence ? 'ic_recurring' : 'ic_reminder'),
-      largeIcon: reminder.todoList ? 'ic_todo' : (reminder.recurrence ? 'ic_recurring' : 'ic_reminder'),
-      color: reminder.priority === 'high' ? '#FF5252' : 
-             (reminder.priority === 'medium' ? '#FFA726' : 
-              (reminder.todoList ? '#4CAF50' : '#2196F3')),
-    });
-
-    console.log(`Scheduled reminder for ${new Date(reminder.timestamp).toLocaleString()}: ${reminder.text}`);
+        title: 'Reminder',
+        body: reminder.text,
+        fireDate: new Date(reminder.timestamp),
+        sound: 'notification.mp3',
+        repeats: false,
+        userInfo: { id: reminder.id }
+      });
+    } else {
+      // Schedule local notification for reminder
+      PushNotification.localNotificationSchedule({
+        id: reminder.id,
+        channelId: 'reminders-channel',
+        title: 'Reminder',
+        message: reminder.text,
+        date: new Date(reminder.timestamp),
+        allowWhileIdle: true,
+        playSound: reminder.soundEnabled,
+        soundName: 'notification.mp3',
+        vibrate: true,
+        priority: reminder.priority === 'high' ? 'high' : 'default',
+        importance: reminder.priority === 'high' ? 'high' : 'default',
+        visibility: 'public',
+        userInfo: { id: reminder.id }
+      });
+    }
   } catch (error) {
     console.error('Error scheduling notification:', error);
   }
@@ -222,8 +162,7 @@ export const initializeReminders = () => {
           PushNotificationIOS.presentLocalNotification({
             alertTitle: notification.title || 'Reminder',
             alertBody: notification.message || '',
-            soundName: priority === 'high' ? 'notification3.mp3' : 
-                      (priority === 'medium' ? 'notification2.mp3' : 'notification.mp3'),
+            soundName: 'notification.mp3',
           });
         }
       } catch (error) {
@@ -274,7 +213,7 @@ export const initializeReminders = () => {
         channelName: 'Important Reminders',
         channelDescription: 'High-priority reminders for DHI app',
         playSound: true,
-        soundName: 'notification3.mp3',
+        soundName: 'notification.mp3',
         importance: Importance.HIGH,
         vibrate: true,
       },
@@ -288,7 +227,7 @@ export const initializeReminders = () => {
         channelName: 'Task Lists',
         channelDescription: 'To-do list tasks for DHI app',
         playSound: true,
-        soundName: 'notification2.mp3',
+        soundName: 'notification.mp3',
         importance: Importance.DEFAULT,
         vibrate: true,
       },
@@ -302,7 +241,7 @@ export const initializeReminders = () => {
         channelName: 'Recurring Reminders',
         channelDescription: 'Recurring reminders for DHI app',
         playSound: true,
-        soundName: 'funnotification.mp3',
+        soundName: 'notification.mp3',
         importance: Importance.DEFAULT,
         vibrate: true,
       },
@@ -1122,29 +1061,13 @@ export const updateBadgeCount = async () => {
   }
 };
 
-// Add this function after the initializeSound function
+// Update this function to use only notification.mp3
 export const playPrioritySoundEffect = (priority: 'low' | 'medium' | 'high' = 'medium', isRecurring = false) => {
   // Enable playback in silent mode
   Sound.setCategory('Playback');
   
-  let soundFile;
-  
-  if (isRecurring) {
-    soundFile = 'funnotification.mp3';
-  } else {
-    switch (priority) {
-      case 'high':
-        soundFile = 'notification3.mp3';
-        break;
-      case 'medium':
-        soundFile = 'notification2.mp3';
-        break;
-      case 'low':
-      default:
-        soundFile = 'notification.mp3';
-        break;
-    }
-  }
+  // Use only notification.mp3 for all cases
+  const soundFile = 'notification.mp3';
   
   // Load the sound file
   const sound = new Sound(soundFile, Sound.MAIN_BUNDLE, (error) => {
@@ -1153,7 +1076,7 @@ export const playPrioritySoundEffect = (priority: 'low' | 'medium' | 'high' = 'm
       return;
     }
     
-    // Play the sound with an appropriate volume
+    // Adjust volume based on priority
     sound.setVolume(priority === 'high' ? 1.0 : 0.8);
     sound.play((success) => {
       if (!success) {

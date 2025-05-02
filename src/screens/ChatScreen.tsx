@@ -39,19 +39,102 @@ import { COLORS, FONTS } from '../constants/theme';
 
 // Nice‑looking typographic defaults for Markdown in the chat bubbles
 const markdownStyles: any = {
-  heading1: { fontSize: 20, fontWeight: '700', marginTop: 16, marginBottom: 8, color: '#333' },
-  heading2: { fontSize: 18, fontWeight: '700', marginTop: 12, marginBottom: 6, color: '#333' },
-  heading3: { fontSize: 16, fontWeight: '700', marginTop: 10, marginBottom: 4, color: '#333' },
-  paragraph: { fontSize: 16, lineHeight: 22, marginBottom: 8, color: '#333' },
-  list_item: { fontSize: 16, lineHeight: 22, marginBottom: 6, marginLeft: 8, color: '#333' },
-  bullet_list: { marginBottom: 8, marginTop: 8 },
-  ordered_list: { marginBottom: 8, marginTop: 8 },
-  strong: { fontWeight: '700' },
-  em: { fontStyle: 'italic' },
-  body: { lineHeight: 22 },
+  heading1: { 
+    fontSize: 22, 
+    fontWeight: '700', 
+    marginTop: 20, 
+    marginBottom: 12, 
+    color: '#333',
+    lineHeight: 30
+  },
+  heading2: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    marginTop: 16, 
+    marginBottom: 10, 
+    color: '#333',
+    lineHeight: 28
+  },
+  heading3: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    marginTop: 14, 
+    marginBottom: 8, 
+    color: '#333',
+    lineHeight: 26
+  },
+  paragraph: { 
+    fontSize: 16, 
+    lineHeight: 24, 
+    marginBottom: 12, 
+    color: '#333' 
+  },
+  list_item: { 
+    fontSize: 16, 
+    lineHeight: 24, 
+    marginBottom: 8, 
+    paddingLeft: 8, 
+    color: '#333' 
+  },
+  bullet_list: { 
+    marginBottom: 16, 
+    marginTop: 12,
+    paddingLeft: 8
+  },
+  ordered_list: { 
+    marginBottom: 16, 
+    marginTop: 12,
+    paddingLeft: 8
+  },
+  strong: { 
+    fontWeight: '700' 
+  },
+  em: { 
+    fontStyle: 'italic' 
+  },
+  body: { 
+    lineHeight: 24,
+    letterSpacing: 0.3
+  },
   // Ensure proper spacing for lists
-  bullet_list_icon: { marginRight: 8, fontSize: 16, lineHeight: 22 },
-  ordered_list_icon: { marginRight: 8, fontSize: 16, lineHeight: 22 },
+  bullet_list_icon: { 
+    marginRight: 10, 
+    fontSize: 16, 
+    lineHeight: 24,
+    marginTop: 4
+  },
+  ordered_list_icon: { 
+    marginRight: 10, 
+    fontSize: 16, 
+    lineHeight: 24,
+    marginTop: 4
+  },
+  code_inline: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    padding: 4,
+    borderRadius: 4
+  },
+  code_block: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    padding: 12,
+    borderRadius: 6,
+    marginVertical: 8
+  },
+  fence: {
+    marginTop: 12,
+    marginBottom: 16
+  },
+  blockquote: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginVertical: 12,
+    borderRadius: 4
+  }
 };
 import ReminderDialog from '../components/ReminderDialog';
 import ReminderButton from '../components/ReminderButton';
@@ -443,6 +526,210 @@ const ChatScreen = ({ route, navigation }: Props) => {
     );
   };
 
+  // Helper: remove leading meta‑preface like "Here's a gentle and empathetic approach:"
+  const stripMetaPreface = (text: string): string => {
+    // Matches:   **Here's a gentle and empathetic approach:**   or   Here's some suggestions:
+    return text.replace(
+      /^(?:\*\*)?\s*Here(?:'|')s?\s+(?:a|an|some|another|one|this)\b[^:]{0,100}:\s*/i,
+      ''
+    );
+  };
+
+  // Add a helper function to clean up the content - more focused, less aggressive cleaning
+  // Enhanced cleanupEmotionSections function
+  const cleanupEmotionSections = (content: string): string => {
+    // Store the original content to compare later
+    const originalContent = content;
+    
+    // Only remove the most obvious reasoning markers and tags
+    
+    // Remove prompt tags
+    content = content.replace(/<\/?empathy_chain>/g, '');
+    content = content.replace(/<\/?assistant_response>/g, '');
+    content = content.replace(/<\/?think>/g, '');
+    
+    // Remove obvious section headers for reasoning
+    content = content.replace(/^Emotion:.*?\n/g, '');
+    content = content.replace(/^Underlying Factors(?:.*?):\s*\n/g, '');
+    content = content.replace(/^Chosen Approach(?:.*?):\s*\n/g, '');
+    content = content.replace(/^Therapeutic Framing(?:.*?):\s*\n/g, '');
+    content = content.replace(/^Strategy(?:.*?):\s*\n/g, '');
+    
+    // --- Ensure newline before list markers that are jammed up against prior text ---
+    content = content
+      // bullets using * or - or • even when there is *no* space after the marker
+      .replace(/([^\n])\s*\*\s*/g, '$1\n\n* ')
+      .replace(/([^\n])\s*-\s*/g, '$1\n\n- ')
+      .replace(/([^\n])\s*•\s*/g, '$1\n\n• ')
+      // ordered list numbers like 1 2 3 that have NO '.' yet (detected when a capital
+      // letter follows the number).  We inject a period and a double newline.
+      .replace(/([^\n])\s*(\d{1,2})\s+(?=[A-Z])/g, '$1\n\n$2. ')
+      // ordered list numbers that *do* have '.' or ')' already
+      .replace(/([^\n])\s*(\d{1,2}[.)])\s*/g, '$1\n\n$2 ');
+    
+    // Improve list formatting
+    content = content
+      // For bullet lists: ensure a blank line before "- " when it follows text
+      .replace(/([^\n])\n-\s/g, '$1\n\n- ')
+      // For numbered lists: ensure blank line before "1. ", "2. ", etc. when it follows text
+      .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
+      // Fix jammed lists after headers - ensure a line break after headers
+      .replace(/(#{1,3}\s.+)\n([\-\*]|\d+\.)/g, '$1\n\n$2')
+      // Ensure proper spacing after ordered list number
+      .replace(/(\d+\.)(\S)/g, '$1 $2')
+      // Ensure proper spacing after bullet points
+      .replace(/(\-)(\S)/g, '$1 $2')
+      // Ensure a newline before headers
+      .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
+    
+    // Clean up excessive newlines but preserve paragraph structure
+    content = content.replace(/\n{4,}/g, '\n\n\n');
+    
+    // If we've removed too much, revert to original with minimal cleaning
+    if (content.trim().length < 20 && originalContent.length > 50) {
+      // Just remove the tags but keep the content
+      let simpleCleanup = originalContent;
+      simpleCleanup = simpleCleanup.replace(/<\/?empathy_chain>/g, '');
+      simpleCleanup = simpleCleanup.replace(/<\/?assistant_response>/g, '');
+      simpleCleanup = simpleCleanup.replace(/<\/?think>/g, '');
+      
+      // Apply minimal formatting improvements
+      simpleCleanup = simpleCleanup
+        .replace(/([^\n])\n-\s/g, '$1\n\n- ')
+        .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
+        .replace(/\n{4,}/g, '\n\n\n');
+        
+      return simpleCleanup.trim();
+    }
+    
+    return content.trim();
+  };
+
+  // General purpose function with minimal cleaning to preserve most content
+  // Improved sanitizeAssistantResponse function
+  const sanitizeAssistantResponse = (content: string): string => {
+    // If compass persona, use specialized cleaning
+    if (selectedPersonaId === 'compass') {
+      return cleanupEmotionSections(content);
+    }
+
+    // For all other personas - enhanced cleaning
+    let cleaned = content;
+
+    // Remove any context-related system instructions with stronger pattern matching
+    const systemInstructionPatterns = [
+      /Remember (?:the )?context from (?:our|the) (?:earlier|previous) messages.*/gi,
+      /Your response should be coherent with the ongoing discussion.*/gi,
+      /Maintaining the context from our (?:earlier|previous) conversation.*/gi,
+      /Remember what we discussed earlier.*/gi,
+      /Based on (?:our|the) previous conversation.*/gi,
+      /Continuing from (?:our|the) previous messages.*/gi,
+      /Taking into account our entire conversation so far.*/gi,
+      /A500-calorie diet is extremely low.*/gi,
+      /Remember the context from our earlier messages in this conversation.*/gi,
+      /Remember the context from our earlier messages:.*/gi,
+      /.*A\d+-calorie diet.*/gi
+    ];
+
+    // Apply each pattern to clean the content
+    systemInstructionPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+
+    // More aggressively clean numeric-prefixed sentences that look like context reminders
+    cleaned = cleaned.replace(/\d+\.\s*Remember the context.*/gi, '');
+    cleaned = cleaned.replace(/\d+\.\s*Based on our previous.*/gi, '');
+    
+    // Remove system instruction phrases that might be missed by regexes
+    const systemInstructionPhrases = [
+      "Remember the context from our earlier messages",
+      "Remember the context from our earlier messages in this conversation",
+      "Your response should be coherent with the ongoing discussion",
+      "Maintaining the context from our earlier conversation",
+      "Remember what we discussed earlier",
+      "Based on our previous conversation",
+      "Continuing from our previous messages",
+      "Taking into account our entire conversation so far",
+      "A 500-calorie diet is extremely low",
+      "Remember the context from our earlier messages:",
+      "13. Remember the context"
+    ];
+
+    // Remove exact phrases
+    systemInstructionPhrases.forEach(phrase => {
+      cleaned = cleaned.replace(new RegExp(phrase, 'gi'), '');
+    });
+
+    // Remove only the most obvious tags
+    cleaned = cleaned.replace(/<\/?think>/g, '');
+    cleaned = cleaned.replace(/<\/?empathy_chain>/g, '');
+    cleaned = cleaned.replace(/<\/?assistant_response>/g, '');
+
+    // Only remove obvious prompt leakage
+    if (cleaned.includes('# Interaction/Personality Configuration Blueprint') ||
+        cleaned.includes('## Core Style Identity & Expertise Profile')) {
+      cleaned = cleaned.replace(/# Interaction\/Personality Configuration Blueprint[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
+    }
+
+    if (cleaned.includes('# Natural Conversation Framework') ||
+        cleaned.includes('## Core Approach')) {
+      cleaned = cleaned.replace(/# Natural Conversation Framework[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
+    }
+
+    // Remove any obvious reasoning marks
+    cleaned = cleaned.replace(/\(reason:.*?\)/g, '');
+
+    // Strip "Here's a … approach:" style meta lines
+    cleaned = stripMetaPreface(cleaned);
+
+    // --- Improve list formatting -------------
+    // Better list formatting - ensure proper spacing before list items
+    cleaned = cleaned
+      // For bullet lists: ensure a blank line before "- " when it follows text
+      .replace(/([^\n])\n-\s/g, '$1\n\n- ')
+      // For numbered lists: ensure blank line before "1. ", "2. ", etc. when it follows text
+      .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
+      // Fix jammed lists after headers - ensure a line break after headers
+      .replace(/(#{1,3}\s.+)\n([\-\*]|\d+\.)/g, '$1\n\n$2')
+      // Ensure proper spacing after ordered list number
+      .replace(/(\d+\.)(\S)/g, '$1 $2')
+      // Ensure proper spacing after bullet points
+      .replace(/(\-)(\S)/g, '$1 $2')
+      // Fix multiple bullet points without proper spacing
+      .replace(/(\n\s*-\s[^\n]+)(\n\s*-\s)/g, '$1\n$2')
+      // Fix multiple numbered points without proper spacing
+      .replace(/(\n\s*\d+\.\s[^\n]+)(\n\s*\d+\.\s)/g, '$1\n$2')
+      // Preserve multiple consecutive line breaks for paragraphs
+      .replace(/\n{4,}/g, '\n\n\n')
+      // Ensure a newline before headers
+      .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
+
+    // --- Ensure newline before list markers that are jammed up against prior text ---
+    cleaned = cleaned
+      // bullets using * or - or • even when there is *no* space after the marker
+      .replace(/([^\n])\s*\*\s*/g, '$1\n\n* ')
+      .replace(/([^\n])\s*-\s*/g, '$1\n\n- ')
+      .replace(/([^\n])\s*•\s*/g, '$1\n\n• ')
+      // ordered list numbers like 1 2 3 that have NO '.' yet (detected when a capital
+      // letter follows the number).  We inject a period and a double newline.
+      .replace(/([^\n])\s*(\d{1,2})\s+(?=[A-Z])/g, '$1\n\n$2. ')
+      // ordered list numbers that *do* have '.' or ')' already
+      .replace(/([^\n])\s*(\d{1,2}[.)])\s*/g, '$1\n\n$2 ');
+
+    // Clean up leading/trailing punctuation that might remain after cleaning
+    cleaned = cleaned.replace(/^[.,:;\s]+/, '');
+    cleaned = cleaned.replace(/[.,:;\s]+$/, '');
+    
+    // Handle any awkward double-spaces or extra spaces
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\n\s\n/g, '\n\n');
+    
+    // Remove consecutive line breaks at the start or end
+    cleaned = cleaned.replace(/^\n+/, '').replace(/\n+$/, '');
+
+    return cleaned.trim();
+  };
+
+  // Modify handleSendMessage to handle the message transition properly
   const handleSendMessage = async () => {
     // Store current input to preserve it after setting reminder
     const currentInput = userInput;
@@ -504,24 +791,18 @@ const ChatScreen = ({ route, navigation }: Props) => {
       // Format with the selected persona's prompt template to ensure proper context
       const formattedMessages = formatPrompt([...updatedConversation], selectedPersonaId);
 
-      // Add instructions to maintain context from the conversation history
+      // Create a separate set of messages for the API call with context instruction
+      // This keeps the context reminder separate from the UI conversation
+      let apiMessages = [...formattedMessages];
+
+      // Only add context reminder for API call if conversation has enough history
       if (updatedConversation.length > 3) {
-        formattedMessages.push({
+        // Add a hidden system message with clear instruction not to repeat it
+        apiMessages.push({
           role: 'system',
-          content: 'Remember the context from our earlier messages in this conversation. Your response should be coherent with the ongoing discussion.'
+          content: 'IMPORTANT SYSTEM INSTRUCTION (DO NOT REPEAT OR MENTION): Remember the context from earlier messages in this conversation.'
         });
       }
-
-      // Append a placeholder for the assistant's response
-      setConversation((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: '',
-          thought: undefined,
-          showThought: false,
-        },
-      ]);
       
       let currentAssistantMessage = '';
       let currentThought = '';
@@ -541,7 +822,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       try {
         const result: CompletionResult = await context.completion(
           {
-            messages: formattedMessages,
+            messages: apiMessages,
             n_predict: 10000,
             stop: stopWords,
             // Add parameters to improve response quality and context retention
@@ -563,17 +844,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
                 inEmpathyChain = false;
                 const finalThought = currentThought.replace('</empathy_chain>', '').trim();
                 
-                setConversation((prev) => {
-                  const lastIndex = prev.length - 1;
-                  const updated = [...prev];
-                  updated[lastIndex] = {
-                    ...updated[lastIndex],
-                    thought: finalThought,
-                  };
-                  return updated;
-                });
-                
-                currentThought = '';
+                // Store the thought for later when we render the message
+                currentThought = finalThought;
                 return; // Skip adding this to visible content
               } else if (inEmpathyChain) {
                 currentThought += token;
@@ -595,17 +867,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
                 inThinkBlock = false;
                 const finalThought = currentThought.replace('</think>', '').trim();
 
-                setConversation((prev) => {
-                  const lastIndex = prev.length - 1;
-                  const updated = [...prev];
-                  updated[lastIndex] = {
-                    ...updated[lastIndex],
-                    thought: finalThought,
-                  };
-                  return updated;
-                });
-
-                currentThought = '';
+                // Store the thought for later when we render the message
+                currentThought = finalThought;
                 return; // Skip adding this to visible content
               } else if (inThinkBlock) {
                 currentThought += token;
@@ -613,27 +876,10 @@ const ChatScreen = ({ route, navigation }: Props) => {
               }
             }
 
-            // Only update visible content with tokens that aren't part of thought process
+            // Only add visible content that isn't part of thought process
             if (!inEmpathyChain && !inThinkBlock) {
-              setConversation((prev) => {
-                const lastIndex = prev.length - 1;
-                const updated = [...prev];
-                
-                // Build visible content from scratch instead of filtering the whole message
-                if (!updated[lastIndex].content) {
-                  updated[lastIndex].content = token;
-                } else {
-                  updated[lastIndex].content += token;
-                }
-
-                // Only clean up when we have enough content to avoid removing too much
-                if (updated[lastIndex].content.length > 30) {
-                  // Apply minimal cleaning to preserve most content while removing obvious artifacts
-                  updated[lastIndex].content = sanitizeAssistantResponse(updated[lastIndex].content);
-                }
-                
-                return updated;
-              });
+              // We'll only create the message once we're done generating
+              currentAssistantMessage = sanitizeAssistantResponse(currentAssistantMessage);
             }
 
             if (autoScrollEnabled && scrollViewRef.current) {
@@ -643,6 +889,17 @@ const ChatScreen = ({ route, navigation }: Props) => {
             }
           }
         );
+        
+        // Once generation is complete, add the assistant message to the conversation
+        setConversation(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: sanitizeAssistantResponse(currentAssistantMessage),
+            thought: currentThought || undefined,
+            showThought: false,
+          }
+        ]);
       } catch (error) {
         console.error('Error during completion:', error);
         Alert.alert('Error', 'Failed to generate a response. Please try again.');
@@ -689,145 +946,11 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   };
 
-  // Helper: remove leading meta‑preface like “Here’s a gentle and empathetic approach:”
-  const stripMetaPreface = (text: string): string => {
-    // Matches:   **Here's a gentle and empathetic approach:**   or   Here's some suggestions:
-    return text.replace(
-      /^(?:\*\*)?\s*Here(?:’|'|’)s?\s+(?:a|an|some|another|one|this)\b[^:]{0,100}:\s*/i,
-      ''
-    );
-  };
-
-  // Add a helper function to clean up the content - more focused, less aggressive cleaning
-// Enhanced cleanupEmotionSections function
-const cleanupEmotionSections = (content: string): string => {
-  // Store the original content to compare later
-  const originalContent = content;
-  
-  // Only remove the most obvious reasoning markers and tags
-  
-  // Remove prompt tags
-  content = content.replace(/<\/?empathy_chain>/g, '');
-  content = content.replace(/<\/?assistant_response>/g, '');
-  content = content.replace(/<\/?think>/g, '');
-  
-  // Remove obvious section headers for reasoning
-  content = content.replace(/^Emotion:.*?\n/g, '');
-  content = content.replace(/^Underlying Factors(?:.*?):\s*\n/g, '');
-  content = content.replace(/^Chosen Approach(?:.*?):\s*\n/g, '');
-  content = content.replace(/^Therapeutic Framing(?:.*?):\s*\n/g, '');
-  content = content.replace(/^Strategy(?:.*?):\s*\n/g, '');
-  
-  // Improve list formatting
-  content = content
-    // For bullet lists: ensure a blank line before "- " when it follows text
-    .replace(/([^\n])\n-\s/g, '$1\n\n- ')
-    // For numbered lists: ensure blank line before "1. ", "2. ", etc. when it follows text
-    .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
-    // Fix jammed lists after headers - ensure a line break after headers
-    .replace(/(#{1,3}\s.+)\n([\-\*]|\d+\.)/g, '$1\n\n$2')
-    // Ensure proper spacing after ordered list number
-    .replace(/(\d+\.)(\S)/g, '$1 $2')
-    // Ensure proper spacing after bullet points
-    .replace(/(\-)(\S)/g, '$1 $2')
-    // Ensure a newline before headers
-    .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
-  
-  // Clean up excessive newlines but preserve paragraph structure
-  content = content.replace(/\n{4,}/g, '\n\n\n');
-  
-  // If we've removed too much, revert to original with minimal cleaning
-  if (content.trim().length < 20 && originalContent.length > 50) {
-    // Just remove the tags but keep the content
-    let simpleCleanup = originalContent;
-    simpleCleanup = simpleCleanup.replace(/<\/?empathy_chain>/g, '');
-    simpleCleanup = simpleCleanup.replace(/<\/?assistant_response>/g, '');
-    simpleCleanup = simpleCleanup.replace(/<\/?think>/g, '');
-    
-    // Apply minimal formatting improvements
-    simpleCleanup = simpleCleanup
-      .replace(/([^\n])\n-\s/g, '$1\n\n- ')
-      .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
-      .replace(/\n{4,}/g, '\n\n\n');
-      
-    return simpleCleanup.trim();
-  }
-  
-  return content.trim();
-};
-
-  // General purpose function with minimal cleaning to preserve most content
-// Improved sanitizeAssistantResponse function
-const sanitizeAssistantResponse = (content: string): string => {
-  // If compass persona, use specialized cleaning
-  if (selectedPersonaId === 'compass') {
-    return cleanupEmotionSections(content);
-  }
-
-  // For all other personas - minimal cleaning
-  let cleaned = content;
-
-  // Remove only the most obvious tags
-  cleaned = cleaned.replace(/<\/?think>/g, '');
-  cleaned = cleaned.replace(/<\/?empathy_chain>/g, '');
-  cleaned = cleaned.replace(/<\/?assistant_response>/g, '');
-
-  // Only remove obvious prompt leakage
-  if (cleaned.includes('# Interaction/Personality Configuration Blueprint') ||
-      cleaned.includes('## Core Style Identity & Expertise Profile')) {
-    cleaned = cleaned.replace(/# Interaction\/Personality Configuration Blueprint[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
-  }
-
-  if (cleaned.includes('# Natural Conversation Framework') ||
-      cleaned.includes('## Core Approach')) {
-    cleaned = cleaned.replace(/# Natural Conversation Framework[\s\S]*?(?=\n\n\n|\n\n[^#\s]|$)/g, '');
-  }
-
-  // Remove any obvious reasoning marks
-  cleaned = cleaned.replace(/\(reason:.*?\)/g, '');
-
-  // Strip "Here's a … approach:" style meta lines
-  cleaned = stripMetaPreface(cleaned);
-
-  // --- Improve list formatting -------------
-  // Better list formatting - ensure proper spacing before list items
-  cleaned = cleaned
-    // For bullet lists: ensure a blank line before "- " when it follows text
-    .replace(/([^\n])\n-\s/g, '$1\n\n- ')
-    // For numbered lists: ensure blank line before "1. ", "2. ", etc. when it follows text
-    .replace(/([^\n])\n(\d+\.)\s/g, '$1\n\n$2 ')
-    // Fix jammed lists after headers - ensure a line break after headers
-    .replace(/(#{1,3}\s.+)\n([\-\*]|\d+\.)/g, '$1\n\n$2')
-    // Ensure proper spacing after ordered list number
-    .replace(/(\d+\.)(\S)/g, '$1 $2')
-    // Ensure proper spacing after bullet points
-    .replace(/(\-)(\S)/g, '$1 $2')
-    // Preserve multiple consecutive line breaks for paragraphs
-    .replace(/\n{4,}/g, '\n\n\n')
-    // Ensure a newline before headers
-    .replace(/([^\n])(\n#{1,3}\s)/g, '$1\n\n$2');
-
-  return cleaned.trim();
-};
-
+  // Update stopGeneration to work properly with the new approach
   const stopGeneration = async () => {
     try {
       await context.stopCompletion();
       setIsGenerating(false);
-
-      setConversation((prev) => {
-        const lastMessage = prev[prev.length - 1];
-        if (lastMessage.role === 'assistant') {
-          return [
-            ...prev.slice(0, -1),
-            {
-              ...lastMessage,
-              content: lastMessage.content + '\n\n*Generation stopped by user*',
-            },
-          ];
-        }
-        return prev;
-      });
     } catch (error) {
       console.error('Error stopping completion:', error);
     }
@@ -917,31 +1040,91 @@ const sanitizeAssistantResponse = (content: string): string => {
     );
   };
   
-  const handlePersonaChange = async (personaId: string) => {
-    setSelectedPersonaId(personaId);
-    
-    // Update system message
-    // First, find the persona from both built-in and custom personas
+  const resetConversationWithNewPersona = async (
+    personaId: string,
+    allPersonas: PromptTemplate[],
+    currentChatId: string | null,
+    setConversation: React.Dispatch<React.SetStateAction<Message[]>>,
+    updateChatSession: (chatId: string, updates: any) => Promise<boolean>
+  ) => {
     try {
-      const allPersonas = await getAllPersonas();
       const selectedTemplate = allPersonas.find((p: PromptTemplate) => p.id === personaId) || promptTemplates[0];
       
-      if (selectedTemplate) {
-        // If we have messages, update the system message
-        if (conversation.length > 0 && conversation[0].role === 'system') {
-          const updatedConversation = [...conversation];
-          updatedConversation[0] = {
-            ...updatedConversation[0],
-            content: selectedTemplate.systemPrompt
-          };
-          setConversation(updatedConversation);
-          
-          // Save the updated conversation
-          if (currentChatId) {
-            await updateChatSession(currentChatId, {
-              messages: updatedConversation,
-              personaId
-            });
+      // Create a fresh conversation with just the system message
+      const newConversation: Message[] = [{
+        role: 'system' as const,
+        content: selectedTemplate.systemPrompt
+      }];
+      
+      setConversation(newConversation);
+      
+      // Save the updated conversation
+      if (currentChatId) {
+        await updateChatSession(currentChatId, {
+          messages: newConversation,
+          personaId
+        });
+      }
+      
+      // Add a system message to indicate the persona change
+      setConversation(prev => [
+        ...prev,
+        {
+          role: 'system' as const,
+          content: `Switched to ${selectedTemplate.name}. Previous conversation has been reset.`
+        }
+      ]);
+    } catch (error) {
+      console.error('Error resetting conversation with new persona:', error);
+    }
+  };
+
+  const handlePersonaChange = async (personaId: string, resetHistory: boolean = false) => {
+    setSelectedPersonaId(personaId);
+    
+    try {
+      const allPersonas = await getAllPersonas();
+      
+      if (resetHistory) {
+        // Reset conversation with new persona
+        await resetConversationWithNewPersona(
+          personaId,
+          allPersonas,
+          currentChatId,
+          setConversation,
+          updateChatSession
+        );
+      } else {
+        // Update just the system message
+        const selectedTemplate = allPersonas.find((p: PromptTemplate) => p.id === personaId) || promptTemplates[0];
+        
+        if (selectedTemplate) {
+          // If we have messages, update the system message
+          if (conversation.length > 0 && conversation[0].role === 'system') {
+            const updatedConversation = [...conversation];
+            updatedConversation[0] = {
+              ...updatedConversation[0],
+              role: 'system' as const,
+              content: selectedTemplate.systemPrompt
+            };
+            setConversation(updatedConversation);
+            
+            // Save the updated conversation
+            if (currentChatId) {
+              await updateChatSession(currentChatId, {
+                messages: updatedConversation,
+                personaId
+              });
+            }
+            
+            // Add a system message to indicate the persona change
+            setConversation(prev => [
+              ...prev,
+              {
+                role: 'system' as const,
+                content: `Switched to ${selectedTemplate.name}. Previous conversation history is maintained.`
+              }
+            ]);
           }
         }
       }
@@ -1415,7 +1598,17 @@ const sanitizeAssistantResponse = (content: string): string => {
                   Welcome! {selectedPersona.name} is ready to help. Ask away! 🎉
                 </Text>
               </View>
-              {conversation.slice(1).map((msg, index) => (
+              {conversation.slice(1)
+                // Filter out system messages containing context instructions 
+                .filter(msg => {
+                  if (msg.role === 'system') {
+                    // Don't show system messages with context reminders
+                    return !msg.content.includes('Remember the context') && 
+                           !msg.content.includes('IMPORTANT SYSTEM INSTRUCTION');
+                  }
+                  return true; 
+                })
+                .map((msg, index) => (
                 <View key={index} style={styles.messageWrapper}>
                   {msg.role === 'user' ? (
                     <View
@@ -1433,7 +1626,13 @@ const sanitizeAssistantResponse = (content: string): string => {
                         <Markdown style={markdownStyles}>{msg.content}</Markdown>
                       </Text>
                     </View>
+                  ) : msg.role === 'system' ? (
+                    // System messages rendered differently - subtle notification style
+                    <View style={styles.systemMessageContainer}>
+                      <Text style={styles.systemMessageText}>{msg.content}</Text>
+                    </View>
                   ) : (
+                    // Assistant messages
                     <View style={styles.assistantMessageContainer}>
                       <View style={styles.assistantHeader}>
                         <Image 
@@ -1470,6 +1669,29 @@ const sanitizeAssistantResponse = (content: string): string => {
                   )}
                 </View>
               ))}
+              
+              {/* Show thinking indicator only when generating and no message is being added yet */}
+              {isGenerating && (
+                <View style={styles.messageWrapper}>
+                  <View style={styles.assistantMessageContainer}>
+                    <View style={styles.assistantHeader}>
+                      <Image 
+                        source={getImageSource(selectedPersona.iconPath)}
+                        style={styles.assistantIcon}
+                      />
+                    </View>
+                    <View style={styles.loadingContent}>
+                      <Image
+                        source={require('../../assets/loading.gif')}
+                        style={styles.loadingGif}
+                      />
+                      <Text style={styles.loadingIndicatorText}>
+                        {selectedPersona.name} is thinking...
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
               
               {!context && (
                 <View style={styles.loadingContainer}>
@@ -1546,6 +1768,7 @@ const sanitizeAssistantResponse = (content: string): string => {
         onClose={() => setPersonaSelectorVisible(false)}
         selectedPersonaId={selectedPersonaId}
         onSelectPersona={handlePersonaChange}
+        hasConversationHistory={conversation.length > 1}
       />
       
       {/* Reminder Dialog */}
@@ -1667,16 +1890,24 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     flexGrow: 1,
-    paddingBottom: 8,
+    paddingBottom: 12,
+    // Add padding for larger screens
+    ...(width > 768 ? { paddingHorizontal: width * 0.04 } : {})
   },
   chatWrapper: {
     flex: 1,
     padding: Math.min(12, width * 0.03),
+    // Add max-width for large screens to avoid stretched content
+    ...(width > 768 ? { 
+      maxWidth: 800,
+      alignSelf: 'center',
+      width: '100%',
+    } : {})
   },
   chatContainer: {
     flex: 1,
     padding: Math.min(12, width * 0.03),
-    marginBottom: 8,
+    marginBottom: 12,
   },
   greetingText: {
     fontSize: Math.min(15, width * 0.038),
@@ -1687,10 +1918,10 @@ const styles = StyleSheet.create({
     lineHeight: Math.min(22, width * 0.055),
   },
   messageWrapper: {
-    marginBottom: Math.min(16, width * 0.04),
+    marginBottom: Math.min(20, width * 0.05),
   },
   messageBubble: {
-    padding: Math.max(8, width * 0.02),
+    padding: Math.max(12, width * 0.03),
     borderRadius: 16,
     maxWidth: '85%',
     shadowColor: '#000',
@@ -1704,9 +1935,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.userBubble,
   },
   messageText: {
-    fontSize: Math.min(15, width * 0.04),
+    fontSize: Math.min(16, width * 0.042),
     color: COLORS.text,
-    lineHeight: Math.min(22, width * 0.055),
+    lineHeight: Math.min(24, width * 0.06),
     fontFamily: FONTS.primary,
   },
   userMessageText: {
@@ -1714,14 +1945,22 @@ const styles = StyleSheet.create({
   },
   assistantMessageContainer: {
     alignSelf: 'flex-start',
-    maxWidth: width > 500 ? '80%' : '90%',
-    marginBottom: 8,
+    maxWidth: width > 500 ? '85%' : '92%',
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: Math.max(12, width * 0.03),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   assistantMessageText: {
     fontSize: Math.min(16, width * 0.042),
     color: COLORS.text,
     lineHeight: Math.min(24, width * 0.06),
-    marginBottom: 6,
+    marginBottom: 8,
     fontFamily: FONTS.primary,
   },
   thoughtContainer: {
@@ -1908,6 +2147,52 @@ const styles = StyleSheet.create({
   },
   headerButtonSpacer: {
     width: Math.min(16, width * 0.04),
+  },
+  systemMessageContainer: {
+    padding: 8,
+    backgroundColor: 'rgba(225, 79, 41, 0.05)',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  systemMessageText: {
+    color: COLORS.lightText,
+    fontSize: Math.min(12, width * 0.03),
+    fontStyle: 'italic',
+    lineHeight: Math.min(16, width * 0.04),
+    fontFamily: FONTS.secondary,
+  },
+  loadingMessageContainer: {
+    alignSelf: 'flex-start',
+    maxWidth: width > 500 ? '85%' : '92%',
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: Math.max(12, width * 0.03),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    flexDirection: 'column',
+  },
+  loadingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  loadingGif: {
+    width: 40, // Reduced size for better appearance
+    height: 40, // Reduced size for better appearance
+    resizeMode: 'contain',
+    alignSelf: 'flex-start',
+    marginVertical: 4,
+  },
+  loadingIndicatorText: {
+    color: COLORS.text,
+    fontSize: Math.min(14, width * 0.035),
+    fontWeight: '500',
+    fontFamily: FONTS.secondary,
+    marginLeft: 6,
   },
 });
 

@@ -18,21 +18,24 @@ import { promptTemplates, PromptTemplate, getAllPersonas } from '../utils/prompt
 import { deleteCustomPersona } from '../utils/customPersonaStorage';
 import CreatePersonaButton from './CreatePersonaButton';
 import RNFS from 'react-native-fs';
+import { COLORS, FONTS } from '../constants/theme';
 
-const { height } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 type PersonaSelectorProps = {
   visible: boolean;
   onClose: () => void;
   selectedPersonaId: string;
-  onSelectPersona: (personaId: string) => void;
+  onSelectPersona: (personaId: string, resetHistory?: boolean) => void;
+  hasConversationHistory: boolean;
 };
 
 const PersonaSelector = ({
   visible,
   onClose,
   selectedPersonaId,
-  onSelectPersona
+  onSelectPersona,
+  hasConversationHistory
 }: PersonaSelectorProps) => {
   const [personas, setPersonas] = useState<PromptTemplate[]>(promptTemplates);
   const [loading, setLoading] = useState(false);
@@ -61,6 +64,41 @@ const PersonaSelector = ({
     loadPersonas();
   };
   
+  const handlePersonaSelect = (personaId: string) => {
+    // If current persona is different and we have conversation history
+    if (personaId !== selectedPersonaId && hasConversationHistory) {
+      Alert.alert(
+        'Change Persona',
+        'Changing personas will affect how messages are interpreted. Would you like to keep the conversation history or start fresh?',
+        [
+          {
+            text: 'Keep History',
+            onPress: () => {
+              onSelectPersona(personaId, false);
+              onClose();
+            }
+          },
+          {
+            text: 'Start Fresh',
+            style: 'destructive',
+            onPress: () => {
+              onSelectPersona(personaId, true);
+              onClose();
+            }
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          }
+        ]
+      );
+    } else {
+      // If no history or same persona, just change
+      onSelectPersona(personaId, false);
+      onClose();
+    }
+  };
+  
   const handleDeletePersona = (personaId: string, personaName: string) => {
     // Confirm deletion
     Alert.alert(
@@ -81,7 +119,7 @@ const PersonaSelector = ({
               if (success) {
                 // If the deleted persona was selected, switch to default
                 if (selectedPersonaId === personaId) {
-                  onSelectPersona('general');
+                  onSelectPersona('general', true);
                 }
                 
                 // Reload personas
@@ -150,7 +188,7 @@ const PersonaSelector = ({
               
               {loading ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#e14f29" />
+                  <ActivityIndicator size="large" color={COLORS.primary} />
                   <Text style={styles.loadingText}>Loading personas...</Text>
                 </View>
               ) : (
@@ -170,10 +208,7 @@ const PersonaSelector = ({
                           styles.personaItem,
                           selectedPersonaId === persona.id && styles.selectedPersona
                         ]}
-                        onPress={() => {
-                          onSelectPersona(persona.id);
-                          onClose();
-                        }}
+                        onPress={() => handlePersonaSelect(persona.id)}
                         activeOpacity={0.7}
                       >
                         <View style={styles.personaIconContainer}>
@@ -211,10 +246,7 @@ const PersonaSelector = ({
                                 styles.customPersonaItem,
                                 selectedPersonaId === persona.id && styles.selectedPersona
                               ]}
-                              onPress={() => {
-                                onSelectPersona(persona.id);
-                                onClose();
-                              }}
+                              onPress={() => handlePersonaSelect(persona.id)}
                               activeOpacity={0.7}
                             >
                               <View style={[styles.personaIconContainer, styles.customPersonaIconContainer]}>
@@ -263,11 +295,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: height * 0.9,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    height: height * 0.8,
+    paddingTop: 8,
   },
   headerBar: {
     width: 40,
@@ -275,154 +307,159 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 8,
+    marginBottom: 8,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    justifyContent: 'center',
+    paddingHorizontal: Math.min(16, width * 0.04),
+    paddingVertical: Math.min(12, height * 0.015),
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    position: 'relative',
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
   },
   headerTitle: {
-    fontSize: Math.min(18, Dimensions.get('window').width * 0.045),
+    fontSize: Math.min(18, width * 0.045),
     fontWeight: '600',
-    color: '#000',
+    color: COLORS.text,
+    fontFamily: FONTS.primary,
   },
   closeButton: {
     position: 'absolute',
-    right: 16,
-    top: 14,
-    width: 26,
-    height: 26,
-    alignItems: 'center',
+    right: Math.min(16, width * 0.04),
+    width: Math.min(40, width * 0.1),
+    height: Math.min(40, width * 0.1),
     justifyContent: 'center',
+    alignItems: 'center',
   },
   closeButtonText: {
-    fontSize: 26,
+    fontSize: Math.min(28, width * 0.07),
+    color: COLORS.text,
     fontWeight: '400',
-    color: '#666',
   },
   loadingContainer: {
-    padding: 24,
-    alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#666',
+    marginTop: 16,
+    fontSize: Math.min(16, width * 0.04),
+    color: COLORS.text,
+    fontFamily: FONTS.primary,
   },
   personaList: {
-    maxHeight: height * 0.7,
+    flex: 1,
   },
   personaListContent: {
-    padding: Math.min(16, Dimensions.get('window').width * 0.04),
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+    paddingHorizontal: Math.min(16, width * 0.04),
+    paddingBottom: Math.min(24, height * 0.03),
   },
   sectionTitle: {
-    fontSize: Math.min(14, Dimensions.get('window').width * 0.035),
+    fontSize: Math.min(16, width * 0.04),
     fontWeight: '600',
-    color: '#666',
-    marginTop: 8,
-    marginBottom: 10,
-    paddingHorizontal: 4,
+    color: COLORS.text,
+    marginTop: Math.min(16, height * 0.02),
+    marginBottom: Math.min(12, height * 0.015),
+    fontFamily: FONTS.primary,
   },
   customSectionTitle: {
-    marginTop: 20,
+    marginTop: Math.min(24, height * 0.03),
   },
   personaItem: {
     flexDirection: 'row',
-    padding: Platform.OS === 'ios' ? 14 : 12,
-    borderRadius: 12,
-    marginBottom: 10,
-    backgroundColor: '#f8f8f8',
     alignItems: 'center',
-  },
-  customPersonaItemContainer: {
-    position: 'relative',
-    marginBottom: 10,
-  },
-  customPersonaItem: {
-    backgroundColor: '#f0f7ff',
+    padding: Math.min(12, width * 0.03),
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: Math.min(12, height * 0.015),
     borderWidth: 1,
-    borderColor: 'rgba(52, 152, 219, 0.2)',
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   selectedPersona: {
-    backgroundColor: '#e8f4ff',
-    borderWidth: 1,
-    borderColor: '#3498db',
+    borderColor: COLORS.primary,
+    backgroundColor: `${COLORS.primaryLight}10`,
+  },
+  customPersonaItem: {
+    flex: 1,
+    marginRight: Math.min(8, width * 0.02),
+  },
+  customPersonaItemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Math.min(12, height * 0.015),
   },
   personaIconContainer: {
-    width: Math.min(48, Dimensions.get('window').width * 0.12),
-    height: Math.min(48, Dimensions.get('window').width * 0.12),
-    borderRadius: Math.min(24, Dimensions.get('window').width * 0.06),
-    backgroundColor: 'white',
-    alignItems: 'center',
+    width: Math.min(48, width * 0.12),
+    height: Math.min(48, width * 0.12),
+    borderRadius: Math.min(24, width * 0.06),
+    backgroundColor: `${COLORS.primaryLight}20`,
     justifyContent: 'center',
-    marginRight: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    overflow: 'hidden',
+    alignItems: 'center',
+    marginRight: Math.min(12, width * 0.03),
   },
   customPersonaIconContainer: {
-    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+    backgroundColor: `${COLORS.primaryLight}10`,
+  },
+  personaIconImage: {
+    width: '60%',
+    height: '60%',
+    resizeMode: 'contain',
   },
   personaIcon: {
-    fontSize: 24,
+    fontSize: Math.min(24, width * 0.06),
+    color: COLORS.primary,
+    fontWeight: '600',
   },
   personaInfo: {
     flex: 1,
   },
   personaName: {
-    fontSize: Math.min(16, Dimensions.get('window').width * 0.04),
+    fontSize: Math.min(16, width * 0.04),
     fontWeight: '600',
-    marginBottom: 2,
-    color: '#000',
-    letterSpacing: 0.1,
+    color: COLORS.text,
+    marginBottom: 4,
+    fontFamily: FONTS.primary,
   },
   personaDescription: {
-    fontSize: Math.min(14, Dimensions.get('window').width * 0.035),
-    color: '#666',
-    lineHeight: Math.min(20, Dimensions.get('window').width * 0.045),
+    fontSize: Math.min(14, width * 0.035),
+    color: COLORS.lightText,
+    fontFamily: FONTS.secondary,
   },
   deleteButton: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: Math.min(32, width * 0.08),
+    height: Math.min(32, width * 0.08),
+    borderRadius: Math.min(16, width * 0.04),
     backgroundColor: '#FF3B30',
-    alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-    zIndex: 2,
-    padding: 0,
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FF3B30',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   deleteButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'center',
-    lineHeight: 20,
-    includeFontPadding: false,
-    marginTop: -1,
-  },
-  personaIconImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
+    fontSize: Math.min(20, width * 0.05),
+    color: '#FFFFFF',
+    fontWeight: '400',
   },
 });
 

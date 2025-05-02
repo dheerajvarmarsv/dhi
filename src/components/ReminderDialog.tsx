@@ -303,7 +303,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
       }
     }
   }, [visible, reminderText]);
-  
+
   // Animation effect
   useEffect(() => {
     if (visible) {
@@ -439,7 +439,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
       return `Today at ${reminderDate.format('h:mm A')}`;
     } else if (reminderDate.isSame(now.clone().add(1, 'day'), 'day')) {
       return `Tomorrow at ${reminderDate.format('h:mm A')}`;
-    } else {
+          } else {
       return reminderDate.format('MMM D, YYYY [at] h:mm A');
     }
   })();
@@ -527,7 +527,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
             : `Every ${recurrenceInterval} weeks`;
         } else if (selectedDaysOfWeek.length === 7) {
           return 'Every day';
-        } else {
+    } else {
           const dayNames = selectedDaysOfWeek
             .sort()
             .map(day => getDayName(day))
@@ -547,7 +547,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
         return 'No repetition';
     }
   };
-  
+
   return (
     <Modal
       transparent={true}
@@ -565,18 +565,18 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
             <TouchableOpacity style={styles.backdropTouch} onPress={onClose} />
             
             <Animated.View style={[styles.dialogContainer, animatedStyles]}>
-              <View style={styles.header}>
+            <View style={styles.header}>
                 <Image 
                   source={require('../../assets/reminder.png')} 
                   style={styles.headerIcon}
                   resizeMode="contain"
                 />
                 <Text style={styles.headerTitle}>Set Reminder</Text>
-                <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                  <Text style={styles.closeButtonText}>×</Text>
-                </TouchableOpacity>
-              </View>
-              
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
               <ScrollView 
   contentContainerStyle={styles.content}
   showsVerticalScrollIndicator={true}
@@ -586,17 +586,17 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
 >
                 <View style={styles.sectionContainer}>
                   <Text style={styles.label}>What to remember?</Text>
-                  <TextInput
+              <TextInput
                     style={styles.textInput}
                     value={text}
                     onChangeText={setText}
                     placeholder="Enter reminder text"
-                    multiline
+                multiline
                     numberOfLines={2}
                     placeholderTextColor="#999"
-                  />
-                </View>
-                
+              />
+            </View>
+
                 <View style={styles.sectionContainer}>
                   <Text style={styles.label}>When?</Text>
                   <View style={styles.datePickerOuterContainer}>
@@ -612,7 +612,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
   themeVariant="light" // Add this to ensure light theme with dark text
 />
                     ) : (
-                      <TouchableOpacity 
+            <TouchableOpacity
                         style={styles.dateSelector} 
                         onPress={handleCustomTime}
                         activeOpacity={0.7}
@@ -624,18 +624,18 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                           <Text style={styles.dateText}>{formattedDate}</Text>
                         </View>
                         <Text style={styles.editDateText}>Edit</Text>
-                      </TouchableOpacity>
+            </TouchableOpacity>
                     )}
                     
                     {/* Show DateTimePicker for Android when button is pressed */}
                     {Platform.OS === 'android' && showDatePicker && (
                       <DateTimePicker
                         value={date}
-                        mode="datetime"
+                  mode="datetime"
                         display="default"
                         onChange={handleDateChange}
-                        minimumDate={new Date()}
-                      />
+                  minimumDate={new Date()}
+                />
                     )}
                   </View>
                 </View>
@@ -644,7 +644,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                   <Text style={styles.quickSelectLabel}>Quick select:</Text>
                   <View style={styles.timeOptionsContainer}>
                     {timeOptions.map((option, index) => (
-                      <TouchableOpacity
+                <TouchableOpacity
                         key={index}
                         style={[
                           styles.timeOption,
@@ -661,9 +661,9 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                         >
                           {option.label}
                         </Text>
-                      </TouchableOpacity>
+                </TouchableOpacity>
                     ))}
-                  </View>
+              </View>
                 </View>
 
                 <View style={styles.settingsSection}>
@@ -730,7 +730,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                   </View>
 
                   {/* Advanced options toggle with better styling */}
-                  <TouchableOpacity 
+              <TouchableOpacity
                     style={styles.advancedOptionsToggle}
                     onPress={() => setShowAdvancedOptions(!showAdvancedOptions)}
                     activeOpacity={0.7}
@@ -1001,13 +1001,13 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
               <View style={styles.footer}>
                 <TouchableOpacity
                   style={[styles.button, styles.cancelButton]}
-                  onPress={onClose}
+                onPress={onClose}
                   activeOpacity={0.7}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
                 
-                <TouchableOpacity
+              <TouchableOpacity
                   style={[
                     styles.button, 
                     styles.setButton, 
@@ -1020,8 +1020,8 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
                   <Text style={styles.setButtonText}>
                     Set {getPriorityIcon()} Reminder
                   </Text>
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
+            </View>
             </Animated.View>
           </View>
         </SafeAreaView>
