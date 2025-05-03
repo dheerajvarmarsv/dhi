@@ -8,11 +8,11 @@ export interface Message {
 export interface ChatSession {
   id: string;
   title: string;
-  model: string;
+  modelId: string;
   messages: Message[];
-  createdAt: number;
-  updatedAt: number;
-  personaId?: string;
+  timestamp: number;
+  lastMessage: string;
+  personaId: string;
 }
 
 export interface Reminder {
@@ -22,4 +22,22 @@ export interface Reminder {
   chatId?: string;
   createdAt: number;
   isCompleted: boolean;
+  soundEnabled?: boolean;
+  priority?: 'low' | 'medium' | 'high';
+  recurrence?: {
+    type: 'daily' | 'weekly' | 'monthly' | 'custom';
+    interval?: number;
+    daysOfWeek?: number[];
+    dayOfMonth?: number;
+    endDate?: number;
+    count?: number;
+  };
+  todoList?: {
+    items: {
+      id: string;
+      text: string;
+      isCompleted: boolean;
+      createdAt: number;
+    }[];
+  };
 } 

@@ -5,25 +5,95 @@ import { Message, ChatSession } from '../types';
 const CHAT_DIRECTORY = `${RNFS.DocumentDirectoryPath}/chats`;
 const CHAT_INDEX_PATH = `${CHAT_DIRECTORY}/chat_index.json`;
 
-// Initialize storage directory
-const initStorage = async () => {
+// Chat session interface that matches the actual implementation
+interface StoredChatSession {
+  id: string;
+  modelId: string; // Using modelId instead of model
+  title: string;
+  lastMessage: string;
+  timestamp: number;
+  messages: Message[];
+  personaId: string;
+}
+
+// Interface for the chat index
+interface ChatIndex {
+  chats: Array<Omit<StoredChatSession, 'messages'>>;
+  lastUpdated: number;
+}
+
+// Initialize storage directory with robust error handling
+const initStorage = async (): Promise<boolean> => {
   try {
+    console.log('Initializing chat storage directories...');
+    
+    // Create the parent directory first if it doesn't exist
     const dirExists = await RNFS.exists(CHAT_DIRECTORY);
     if (!dirExists) {
+      console.log('Creating chat directory...');
       await RNFS.mkdir(CHAT_DIRECTORY);
     }
     
+    // Create the index file if it doesn't exist
     const indexExists = await RNFS.exists(CHAT_INDEX_PATH);
     if (!indexExists) {
+      console.log('Creating chat index file...');
       await RNFS.writeFile(CHAT_INDEX_PATH, JSON.stringify({
         chats: [],
         lastUpdated: Date.now()
       }), 'utf8');
+    } else {
+      // Verify the index file is valid JSON
+      try {
+        const data = await RNFS.readFile(CHAT_INDEX_PATH, 'utf8');
+        JSON.parse(data);
+      } catch (parseError) {
+        console.error('Chat index file corrupted, recreating...', parseError);
+        
+        // Try to recover by backing up and recreating
+        const backupPath = `${CHAT_INDEX_PATH}.backup.${Date.now()}`;
+        await RNFS.copyFile(CHAT_INDEX_PATH, backupPath);
+        
+        // Create a new valid index
+        await RNFS.writeFile(CHAT_INDEX_PATH, JSON.stringify({
+          chats: [],
+          lastUpdated: Date.now()
+        }), 'utf8');
+      }
     }
+    
+    // Verify we can access chat directory and files
+    const directoryItems = await RNFS.readDir(CHAT_DIRECTORY);
+    console.log(`Chat directory contains ${directoryItems.length} items`);
+    
     return true;
   } catch (error) {
     console.error('Error initializing chat storage:', error);
-    return false;
+    
+    // Additional recovery attempt
+    try {
+      console.log('Attempting to recover chat storage...');
+      // Make sure the document directory exists
+      const docDirExists = await RNFS.exists(RNFS.DocumentDirectoryPath);
+      if (!docDirExists) {
+        await RNFS.mkdir(RNFS.DocumentDirectoryPath);
+      }
+      
+      // Recreate the chat directory
+      await RNFS.mkdir(CHAT_DIRECTORY);
+      
+      // Create a new empty index
+      await RNFS.writeFile(CHAT_INDEX_PATH, JSON.stringify({
+        chats: [],
+        lastUpdated: Date.now()
+      }), 'utf8');
+      
+      console.log('Chat storage recovery successful');
+      return true;
+    } catch (recoveryError) {
+      console.error('Chat storage recovery failed:', recoveryError);
+      return false;
+    }
   }
 };
 
@@ -43,7 +113,7 @@ export const createChatSession = async (
   title: string = 'New Chat',
   initialMessages: Message[] = [],
   personaId: string = 'general'
-): Promise<ChatSession | null> => {
+): Promise<StoredChatSession | null> => {
   try {
     await initStorage();
     
@@ -51,7 +121,7 @@ export const createChatSession = async (
     const timestamp = Date.now();
     
     // Create new chat session
-    const newChat: ChatSession = {
+    const newChat: StoredChatSession = {
       id: chatId,
       modelId,
       title,
@@ -96,15 +166,19 @@ export const createChatSession = async (
 };
 
 // Get chat index (list of all chats)
-export const getChatsIndex = async (): Promise<{
-  chats: Array<Omit<ChatSession, 'messages'>>;
-  lastUpdated: number;
-}> => {
+export const getChatsIndex = async (): Promise<ChatIndex> => {
   try {
     await initStorage();
     
     const data = await RNFS.readFile(CHAT_INDEX_PATH, 'utf8');
-    return JSON.parse(data);
+    try {
+      return JSON.parse(data);
+    } catch (parseError) {
+      console.error('Error parsing chat index, recreating:', parseError);
+      const emptyIndex = { chats: [], lastUpdated: Date.now() };
+      await RNFS.writeFile(CHAT_INDEX_PATH, JSON.stringify(emptyIndex), 'utf8');
+      return emptyIndex;
+    }
   } catch (error) {
     console.error('Error getting chats index:', error);
     return { chats: [], lastUpdated: Date.now() };
@@ -112,7 +186,7 @@ export const getChatsIndex = async (): Promise<{
 };
 
 // Helper function to get a preview of the chat content
-const getMessagePreview = (messages: any[]) => {
+const getMessagePreview = (messages: Message[]): string => {
   if (!messages || messages.length <= 1) {
     return '';  // Return empty string for empty chats, UI will show fallback
   }
@@ -152,18 +226,29 @@ export const getChatsByModel = async (modelId: string): Promise<any[]> => {
     const modelChats = indexData.chats
       .filter(chat => chat.modelId === modelId)
       .map(async (chatInfo) => {
-        // Load the full chat to get messages for preview
-        const fullChat = await loadChatSession(chatInfo.id);
-        
-        return {
-          id: chatInfo.id,
-          title: chatInfo.title,
-          // Use the helper function for better previews if we have messages
-          lastMessage: fullChat && fullChat.messages ? 
-            getMessagePreview(fullChat.messages) : 
-            chatInfo.lastMessage,
-          timestamp: chatInfo.timestamp
-        };
+        try {
+          // Load the full chat to get messages for preview
+          const fullChat = await loadChatSession(chatInfo.id);
+          
+          return {
+            id: chatInfo.id,
+            title: chatInfo.title,
+            // Use the helper function for better previews if we have messages
+            lastMessage: fullChat && fullChat.messages ? 
+              getMessagePreview(fullChat.messages) : 
+              chatInfo.lastMessage,
+            timestamp: chatInfo.timestamp
+          };
+        } catch (error) {
+          console.error(`Error loading chat ${chatInfo.id} for preview:`, error);
+          // Return the chat info from the index without trying to load messages
+          return {
+            id: chatInfo.id,
+            title: chatInfo.title,
+            lastMessage: chatInfo.lastMessage,
+            timestamp: chatInfo.timestamp
+          };
+        }
       });
     
     // Wait for all chat previews to be generated
@@ -177,8 +262,8 @@ export const getChatsByModel = async (modelId: string): Promise<any[]> => {
   }
 };
 
-// Load a specific chat session
-export const loadChatSession = async (chatId: string): Promise<ChatSession | null> => {
+// Load a specific chat session with verification and repair capability
+export const loadChatSession = async (chatId: string): Promise<StoredChatSession | null> => {
   try {
     await initStorage();
     
@@ -186,11 +271,45 @@ export const loadChatSession = async (chatId: string): Promise<ChatSession | nul
     const exists = await RNFS.exists(chatPath);
     
     if (!exists) {
+      console.log(`Chat file not found: ${chatPath}`);
       return null;
     }
     
-    const data = await RNFS.readFile(chatPath, 'utf8');
-    return JSON.parse(data);
+    // Read the file with error handling
+    try {
+      const data = await RNFS.readFile(chatPath, 'utf8');
+      const chat = JSON.parse(data);
+      
+      // Verify the chat has required fields
+      if (!chat.id || !chat.modelId || !Array.isArray(chat.messages)) {
+        throw new Error('Chat data is missing required fields');
+      }
+      
+      return chat;
+    } catch (parseError) {
+      console.error(`Error parsing chat file ${chatId}:`, parseError);
+      
+      // Try to recover the file from a backup if one exists
+      try {
+        const backupPath = `${getChatPath(chatId)}.backup`;
+        const backupExists = await RNFS.exists(backupPath);
+        
+        if (backupExists) {
+          console.log(`Attempting to recover chat ${chatId} from backup`);
+          const backupData = await RNFS.readFile(backupPath, 'utf8');
+          const recoveredChat = JSON.parse(backupData);
+          
+          // Save the recovered chat
+          await RNFS.writeFile(chatPath, backupData, 'utf8');
+          
+          return recoveredChat;
+        }
+      } catch (backupError) {
+        console.error(`Backup recovery failed for chat ${chatId}:`, backupError);
+      }
+      
+      return null;
+    }
   } catch (error) {
     console.error('Error loading chat session:', error);
     return null;
@@ -211,15 +330,25 @@ export const updateChatSession = async (
     const exists = await RNFS.exists(chatPath);
     
     if (!exists) {
+      console.error(`Cannot update non-existent chat: ${chatId}`);
       return false;
+    }
+    
+    // Backup the current chat before updating
+    try {
+      const backupPath = `${chatPath}.backup`;
+      await RNFS.copyFile(chatPath, backupPath);
+    } catch (backupError) {
+      console.warn(`Failed to create backup for chat ${chatId}:`, backupError);
+      // Continue with the update even if backup fails
     }
     
     // Get current chat data
     const data = await RNFS.readFile(chatPath, 'utf8');
-    const chatData: ChatSession = JSON.parse(data);
+    const chatData: StoredChatSession = JSON.parse(data);
     
     // Apply updates
-    const updatedChat: ChatSession = {
+    const updatedChat: StoredChatSession = {
       ...chatData,
       ...(updates.title && { title: updates.title }),
       ...(updates.personaId && { personaId: updates.personaId }),
@@ -267,6 +396,21 @@ export const updateChatSession = async (
     return true;
   } catch (error) {
     console.error('Error updating chat session:', error);
+    
+    // Try to recover by using the backup if available
+    try {
+      const chatPath = getChatPath(chatId);
+      const backupPath = `${chatPath}.backup`;
+      const backupExists = await RNFS.exists(backupPath);
+      
+      if (backupExists) {
+        console.log(`Attempting to restore chat ${chatId} from backup after update failure`);
+        await RNFS.copyFile(backupPath, chatPath);
+      }
+    } catch (recoveryError) {
+      console.error(`Failed to recover chat ${chatId} after update error:`, recoveryError);
+    }
+    
     return false;
   }
 };
@@ -278,6 +422,15 @@ export const deleteChatSession = async (chatId: string): Promise<boolean> => {
     const exists = await RNFS.exists(chatPath);
     
     if (exists) {
+      // Create a backup before deletion (in case of accidental deletion)
+      try {
+        const backupPath = `${chatPath}.deleted`;
+        await RNFS.copyFile(chatPath, backupPath);
+      } catch (backupError) {
+        console.warn(`Failed to create backup before deletion for chat ${chatId}:`, backupError);
+        // Continue with deletion even if backup fails
+      }
+      
       await RNFS.unlink(chatPath);
     }
     
@@ -304,7 +457,7 @@ export const saveChatHistory = async (
   modelId: string, 
   conversation: Message[],
   personaId: string
-) => {
+): Promise<boolean> => {
   try {
     // Check if there's an existing "default" chat for this model
     const modelChats = await getChatsByModel(modelId);
@@ -318,7 +471,7 @@ export const saveChatHistory = async (
     } else {
       // Create a new chat
       const title = "Default Chat";
-      await createChatSession(modelId, title, conversation);
+      await createChatSession(modelId, title, conversation, personaId);
       return true;
     }
   } catch (error) {

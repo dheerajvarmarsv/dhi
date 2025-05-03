@@ -283,6 +283,7 @@ export const loadReminders = async (): Promise<Reminder[]> => {
   try {
     const exists = await RNFS.exists(REMINDERS_PATH);
     if (!exists) {
+      console.log('Reminders file does not exist, creating empty file');
       await RNFS.writeFile(
         REMINDERS_PATH,
         JSON.stringify([]),
@@ -291,10 +292,67 @@ export const loadReminders = async (): Promise<Reminder[]> => {
       return [];
     }
 
-    const data = await RNFS.readFile(REMINDERS_PATH, 'utf8');
-    return JSON.parse(data);
+    // Read the file and try to parse it
+    try {
+      const data = await RNFS.readFile(REMINDERS_PATH, 'utf8');
+      const reminders = JSON.parse(data);
+      
+      // Validate the data structure is an array
+      if (!Array.isArray(reminders)) {
+        console.error('Reminders file corrupted (not an array), creating backup and starting fresh');
+        // Create backup of corrupted file
+        const backupPath = `${REMINDERS_PATH}.corrupt.${Date.now()}`;
+        await RNFS.copyFile(REMINDERS_PATH, backupPath);
+        
+        // Reset with empty array
+        await RNFS.writeFile(REMINDERS_PATH, JSON.stringify([]), 'utf8');
+        return [];
+      }
+      
+      // Further validate each reminder has required fields
+      const validReminders = reminders.filter(reminder => {
+        return reminder && 
+               reminder.id && 
+               reminder.text && 
+               reminder.timestamp &&
+               typeof reminder.isCompleted === 'boolean';
+      });
+      
+      // If we filtered out some invalid reminders, save the valid ones
+      if (validReminders.length !== reminders.length) {
+        console.warn(`Filtered out ${reminders.length - validReminders.length} invalid reminders`);
+        await saveReminders(validReminders);
+      }
+      
+      return validReminders;
+    } catch (parseError) {
+      console.error('Error parsing reminders file:', parseError);
+      
+      // Try to recover by backing up and starting fresh
+      try {
+        const backupPath = `${REMINDERS_PATH}.backup.${Date.now()}`;
+        await RNFS.copyFile(REMINDERS_PATH, backupPath);
+        await RNFS.writeFile(REMINDERS_PATH, JSON.stringify([]), 'utf8');
+        console.log('Created backup of corrupted reminders file and reset');
+      } catch (backupError) {
+        console.error('Failed to backup corrupted reminders file:', backupError);
+        // Just create a new empty file
+        await RNFS.writeFile(REMINDERS_PATH, JSON.stringify([]), 'utf8');
+      }
+      
+      return [];
+    }
   } catch (error) {
     console.error('Error loading reminders:', error);
+    
+    // Last resort recovery
+    try {
+      await RNFS.writeFile(REMINDERS_PATH, JSON.stringify([]), 'utf8');
+      console.log('Recreated empty reminders file after error');
+    } catch (writeError) {
+      console.error('Failed to create reminders file:', writeError);
+    }
+    
     return [];
   }
 };
@@ -749,16 +807,67 @@ export const extractReminderFromText = (
 
 // Initialize reminder system on app startup
 export const setupReminderSystem = () => {
-  initializeReminders();
-  requestNotificationPermissions();
+  console.log('Setting up reminder system...');
   
-  // Schedule and process any recurring reminders
-  handleCompletedReminders();
+  // Create a retry mechanism for initialization
+  const initWithRetry = async (retries = 3) => {
+    try {
+      await initializeReminders();
+      await requestNotificationPermissions();
+      
+      // Process any recurring reminders that need scheduling
+      await handleCompletedReminders();
+      
+      // Verify reminders were loaded properly
+      const reminders = await loadReminders();
+      console.log(`Successfully loaded ${reminders.length} reminders`);
+      
+      return true;
+    } catch (error) {
+      console.error(`Reminder system initialization failed (attempt ${4 - retries}/3):`, error);
+      
+      if (retries > 0) {
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return initWithRetry(retries - 1);
+      }
+      
+      console.error('Failed to initialize reminder system after multiple attempts');
+      return false;
+    }
+  };
+  
+  // Start initialization with retry capability
+  initWithRetry();
+  
+  // Set up a backup mechanism to periodically save reminders
+  const backupInterval = setInterval(async () => {
+    try {
+      // Just load and save all reminders to ensure they're properly persisted
+      const reminders = await loadReminders();
+      if (reminders && reminders.length > 0) {
+        await saveReminders(reminders);
+      }
+      
+      // Update badge count
+      await updateBadgeCount();
+    } catch (error) {
+      console.error('Error in reminder backup interval:', error);
+    }
+  }, 60000 * 15); // Every 15 minutes
   
   // Set up a periodic check for completed reminders
-  setInterval(() => {
-    handleCompletedReminders();
+  const reminderCheckInterval = setInterval(() => {
+    handleCompletedReminders().catch(error => {
+      console.error('Error processing completed reminders:', error);
+    });
   }, 60000 * 10); // Check every 10 minutes
+  
+  // Return cleanup function
+  return () => {
+    clearInterval(backupInterval);
+    clearInterval(reminderCheckInterval);
+  };
 };
 
 // Format reminder time in a human-readable way

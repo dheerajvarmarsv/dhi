@@ -17,8 +17,10 @@ import {
   StatusBar,
   Image,
   AppState,
+  AppStateStatus,
   Keyboard,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Markdown from 'react-native-markdown-display';
 import { initLlama, releaseAllLlama } from 'llama.rn';
 import RNFS from 'react-native-fs';
@@ -196,20 +198,174 @@ const ChatScreen = ({ route, navigation }: Props) => {
   // Add an appState ref to track app state changes
   const appStateRef = useRef(AppState.currentState);
 
+  // Add these improved error handling functions for chat operations
+  const loadModel = async (modelName: string) => {
+    try {
+      const destPath = `${RNFS.DocumentDirectoryPath}/${modelName}`;
+      const fileExists = await RNFS.exists(destPath);
+      
+      if (!fileExists) {
+        Alert.alert('Error', 'Model file not found. Please download it first.');
+        navigation.navigate('ModelSelection');
+        return;
+      }
+      
+      console.log(`Loading model from path: ${destPath}`);
+      
+      const llamaContext = await initLlama({
+        model: destPath,
+        use_mlock: true,
+        n_ctx: 2048,
+        n_gpu_layers: 1,
+      });
+      
+      console.log('Model loaded successfully');
+      setContext(llamaContext);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error loading model:', errorMessage);
+      Alert.alert('Error Loading Model', errorMessage);
+      navigation.navigate('ModelSelection');
+    }
+  };
+
   // Load the model and chat when component mounts
   useEffect(() => {
-    loadModel(selectedModel);
-    checkExistingChats();
+    console.log('ChatScreen mounted, initializing with modelId:', selectedModel);
     
-    // Clean up duplicate "New Chat" sessions when component mounts
-    cleanupDuplicateNewChats();
+    // Create a robust initialization function
+    const initializeChat = async () => {
+      try {
+        // Step 1: Load the model
+        await loadModel(selectedModel);
+        
+        // Step 2: Check for existing chats
+        await checkExistingChats();
+        
+        // Step 3: Clean up duplicate "New Chat" sessions
+        await cleanupDuplicateNewChats();
+      } catch (error) {
+        console.error('Error during ChatScreen initialization:', error);
+        
+        // Attempt recovery - if we have no current chat, create a new one
+        if (!currentChatId) {
+          try {
+            await createNewChat();
+          } catch (recoveryError) {
+            console.error('Recovery attempt failed:', recoveryError);
+            // Set a fallback conversation as last resort
+            setConversation(INITIAL_CONVERSATION);
+          }
+        }
+      }
+    };
     
+    // Run the initialization
+    initializeChat();
+    
+    // Cleanup when component unmounts
     return () => {
+      console.log('ChatScreen unmounting, cleaning up...');
       if (context) {
-        releaseAllLlama();
+        try {
+          releaseAllLlama();
+          console.log('Llama models released');
+        } catch (error) {
+          console.error('Error releasing Llama models:', error);
+        }
+      }
+      
+      // Save chat before unmounting
+      if (currentChatId) {
+        saveChat().catch(error => {
+          console.error('Error saving chat during unmount:', error);
+        });
       }
     };
   }, [selectedModel]);
+
+  // Save chat function with improved reliability
+  const saveChat = async () => {
+    if (!currentChatId) return false;
+    
+    try {
+      console.log(`Saving chat ${currentChatId} with ${conversation.length} messages`);
+      
+      // Track success or failure
+      const result = await updateChatSession(currentChatId, {
+        messages: conversation,
+        personaId: selectedPersonaId
+      });
+      
+      if (result) {
+        console.log(`Chat ${currentChatId} saved successfully`);
+        return true;
+      } else {
+        console.error(`Failed to save chat ${currentChatId}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error in saveChat:', error);
+      return false;
+    }
+  };
+
+  // Load a specific chat with improved error handling
+  const loadSpecificChat = async (id: string) => {
+    try {
+      console.log(`Loading chat with ID: ${id}`);
+      const chatSession = await loadChatSession(id);
+      
+      if (chatSession) {
+        console.log(`Chat loaded with ${chatSession.messages?.length || 0} messages`);
+        setConversation(chatSession.messages || INITIAL_CONVERSATION);
+        setSelectedPersonaId(chatSession.personaId || 'general');
+        setChatTitle(chatSession.title || 'New Chat');
+        setCurrentChatId(id);
+        
+        // Update navigation params without triggering a navigation
+        navigation.setParams({ chatId: id });
+        
+        // Store the current chat ID in AsyncStorage for persistence across app relaunches
+        AsyncStorage.setItem('lastChatId', id).catch((error: Error) => {
+          console.error('Error saving lastChatId to AsyncStorage:', error);
+        });
+        
+        // Scroll to the end after loading the chat
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 200);
+        
+        return true;
+      } else {
+        console.warn(`Chat with ID ${id} not found`);
+        
+        // Look for an existing "New Chat" first
+        const existingChats = await getChatsByModel(selectedModel);
+        const newChat = existingChats.find(chat => chat.title === 'New Chat');
+        
+        if (newChat) {
+          console.log('Loading existing "New Chat" instead');
+          await loadSpecificChat(newChat.id);
+        } else {
+          console.log('Creating new chat as fallback');
+          await createNewChat();
+        }
+        
+        return false;
+      }
+    } catch (error) {
+      console.error('Error loading chat:', error);
+      
+      // Only create a new chat if we have no current chat
+      if (!currentChatId) {
+        console.log('Creating new chat after load error');
+        await createNewChat();
+      }
+      
+      return false;
+    }
+  };
   
   // Initialize reminder system and check for active reminders
   useEffect(() => {
@@ -337,42 +493,6 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
   }, [chatId]);
   
-  const loadSpecificChat = async (id: string) => {
-    try {
-      const chatSession = await loadChatSession(id);
-      if (chatSession) {
-        setConversation(chatSession.messages || INITIAL_CONVERSATION);
-        setSelectedPersonaId(chatSession.personaId || 'general');
-        setChatTitle(chatSession.title || 'New Chat');
-        setCurrentChatId(id);
-        
-        // Update navigation params without triggering a navigation
-        navigation.setParams({ chatId: id });
-        
-        // Scroll to the end after loading the chat
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: false });
-        }, 200);
-      } else {
-        // If chat doesn't exist, look for an existing "New Chat" first
-        const existingChats = await getChatsByModel(selectedModel);
-        const newChat = existingChats.find(chat => chat.title === 'New Chat');
-        
-        if (newChat) {
-          await loadSpecificChat(newChat.id);
-        } else {
-          await createNewChat();
-        }
-      }
-    } catch (error) {
-      console.error('Error loading chat:', error);
-      // Only create a new chat if we have no current chat
-      if (!currentChatId) {
-        await createNewChat();
-      }
-    }
-  };
-  
   const createNewChat = async () => {
     try {
       // Create a new initial conversation with the selected persona's system prompt
@@ -437,91 +557,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
     }
     return null;
   };
-  
-  const saveChat = async () => {
-    if (!currentChatId) return;
-    
-    try {
-      await updateChatSession(currentChatId, {
-        messages: conversation,
-        personaId: selectedPersonaId
-      });
-    } catch (error) {
-      console.error('Error saving chat:', error);
-    }
-  };
 
-  const loadModel = async (modelName: string) => {
-    try {
-      const destPath = `${RNFS.DocumentDirectoryPath}/${modelName}`;
-      const fileExists = await RNFS.exists(destPath);
-      
-      if (!fileExists) {
-        Alert.alert('Error', 'Model file not found. Please download it first.');
-        navigation.navigate('ModelSelection');
-        return;
-      }
-      
-      const llamaContext = await initLlama({
-        model: destPath,
-        use_mlock: true,
-        n_ctx: 2048,
-        n_gpu_layers: 1,
-      });
-      
-      setContext(llamaContext);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      Alert.alert('Error Loading Model', errorMessage);
-      navigation.navigate('ModelSelection');
-    }
-  };
-
-  // Add this useEffect to handle app state changes and scrolling
-  useEffect(() => {
-    // Function to scroll to the end of the chat
-    const scrollToEnd = () => {
-      if (scrollViewRef.current && conversation.length > 1) {
-        // Use setTimeout to ensure the scrollview has rendered
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: false });
-        }, 100);
-      }
-    };
-
-    // Scroll to the end on initial render
-    scrollToEnd();
-
-    // Handle app state changes
-    const handleAppStateChange = async (nextAppState: any) => {
-      if (
-        appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        // App has come to the foreground - scroll to the end
-        scrollToEnd();
-        
-        // Update the reminder count when app becomes active
-        try {
-          const activeReminders = await getActiveReminders();
-          setActiveReminderCount(activeReminders.length);
-        } catch (error) {
-          console.error('Error checking reminders on app state change:', error);
-        }
-      }
-      appStateRef.current = nextAppState;
-    };
-
-    // Subscribe to app state changes
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    // Clean up on unmount
-    return () => {
-      subscription.remove();
-    };
-  }, [conversation]);
-
-  // Modify the handleScroll function to keep track of the scroll position
   const handleScroll = (event: any) => {
     const contentHeight = event.nativeEvent.contentSize.height;
     const layoutHeight = event.nativeEvent.layoutMeasurement.height;
@@ -1548,6 +1584,92 @@ const ChatScreen = ({ route, navigation }: Props) => {
     // Navigate to reminders screen
     navigation.navigate('Reminders' as any);
   };
+
+  // Add this useEffect to handle app state changes and scrolling
+  useEffect(() => {
+    // Function to scroll to the end of the chat
+    const scrollToEnd = () => {
+      if (scrollViewRef.current && conversation.length > 1) {
+        // Use setTimeout to ensure the scrollview has rendered
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 100);
+      }
+    };
+
+    // Scroll to the end on initial render
+    scrollToEnd();
+
+    // Handle app state changes
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        console.log('App has come to the foreground - reloading data');
+        
+        // App has come to the foreground - reload all data
+        try {
+          // First reload chat if we have a current chat ID
+          if (currentChatId) {
+            console.log(`Reloading chat with ID: ${currentChatId}`);
+            const reloadedChat = await loadChatSession(currentChatId);
+            if (reloadedChat) {
+              console.log(`Chat reloaded with ${reloadedChat.messages?.length || 0} messages`);
+              // Only update if there are differences to avoid unnecessary re-renders
+              if (JSON.stringify(reloadedChat.messages) !== JSON.stringify(conversation)) {
+                setConversation(reloadedChat.messages || INITIAL_CONVERSATION);
+              }
+              if (reloadedChat.personaId !== selectedPersonaId) {
+                setSelectedPersonaId(reloadedChat.personaId || 'general');
+              }
+            } else {
+              console.log(`Chat with ID ${currentChatId} no longer exists, will create new one`);
+              await createNewChat();
+            }
+          }
+          
+          // Reload and update reminder count
+          const activeReminders = await getActiveReminders();
+          setActiveReminderCount(activeReminders.length);
+          
+          // Scroll to the end after reloading data
+          scrollToEnd();
+        } catch (error: any) {
+          console.error('Error refreshing data on app state change:', error);
+        }
+      } else if (
+        appStateRef.current === 'active' && 
+        (nextAppState === 'background' || nextAppState === 'inactive')
+      ) {
+        // App is going to background - save current chat
+        if (currentChatId) {
+          console.log(`App going to background - saving chat ${currentChatId}`);
+          try {
+            await saveChat();
+            
+            // Also store in AsyncStorage for persistence
+            if (selectedModel) {
+              await AsyncStorage.setItem('lastModel', selectedModel);
+              await AsyncStorage.setItem('lastChatId', currentChatId);
+            }
+          } catch (error: any) {
+            console.error('Error saving chat on app state change:', error);
+          }
+        }
+      }
+      
+      appStateRef.current = nextAppState;
+    };
+
+    // Subscribe to app state changes
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Clean up on unmount
+    return () => {
+      subscription.remove();
+    };
+  }, [currentChatId, conversation, selectedPersonaId]);
 
   return (
     <SafeAreaView style={styles.container}>
