@@ -229,7 +229,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
     checkReminders();
     const interval = setInterval(checkReminders, 60000); // Check every minute
     
-    return () => clearInterval(interval);
+    // Add navigation focus listener to refresh reminder count when screen is focused
+    const unsubscribe = navigation.addListener('focus', () => {
+      checkReminders();
+    });
+    
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   // Add keyboard event listeners
@@ -485,13 +493,21 @@ const ChatScreen = ({ route, navigation }: Props) => {
     scrollToEnd();
 
     // Handle app state changes
-    const handleAppStateChange = (nextAppState: any) => {
+    const handleAppStateChange = async (nextAppState: any) => {
       if (
         appStateRef.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
         // App has come to the foreground - scroll to the end
         scrollToEnd();
+        
+        // Update the reminder count when app becomes active
+        try {
+          const activeReminders = await getActiveReminders();
+          setActiveReminderCount(activeReminders.length);
+        } catch (error) {
+          console.error('Error checking reminders on app state change:', error);
+        }
       }
       appStateRef.current = nextAppState;
     };
@@ -712,6 +728,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
     
     // If message has reminder intent, show reminder dialog
     if (hasReminderIntent) {
+      // Store the original user message that will be shown in the chat
+      // We do not set userInput to empty yet, so the editable text in the dialog will be the same
       setReminderDialogVisible(true);
       return;
     }
@@ -1401,6 +1419,9 @@ const ChatScreen = ({ route, navigation }: Props) => {
       todoItems?: { id: string; text: string; isCompleted: boolean }[]
     }
   ) => {
+    // Get the original user message that triggered the reminder detection
+    const originalUserMessage = userInput;
+    
     // Clear the reminder intent now that we've processed it
     clearReminderIntent();
     
@@ -1414,8 +1435,16 @@ const ChatScreen = ({ route, navigation }: Props) => {
     // Add the user's original message to the conversation first
     const userMessage: Message = { 
       role: 'user', 
-      content: reminderText,
+      content: originalUserMessage,
     };
+    
+    // First update the conversation with just the user message
+    setConversation((prev) => [...prev, userMessage]);
+    
+    // Scroll to bottom to show the new user message
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
     
     // Create confirmation message
     const timeFormatted = reminderTime.toLocaleTimeString([], { 
@@ -1489,21 +1518,34 @@ const ChatScreen = ({ route, navigation }: Props) => {
       }
     }
     
-    // Add both user message and system confirmation
+    // Now add just the system confirmation as a separate message
     setConversation((prev) => [
-      ...prev,
-      userMessage, // Add the user message first
+      ...prev, 
       {
         role: 'system',
         content: confirmationMessage,
       },
     ]);
     
+    // Scroll to bottom to show the system response
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    
     // Save the updated conversation
     await saveChat();
   };
   
-  const handleShowReminders = () => {
+  const handleShowReminders = async () => {
+    // Refresh reminder count before navigating to ensure it's up-to-date
+    try {
+      const activeReminders = await getActiveReminders();
+      setActiveReminderCount(activeReminders.length);
+    } catch (error) {
+      console.error('Error updating reminder count:', error);
+    }
+    
+    // Navigate to reminders screen
     navigation.navigate('Reminders' as any);
   };
 
@@ -1793,7 +1835,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
       <ReminderDialog
         visible={reminderDialogVisible}
         onClose={handleReminderDialogClose}
-        reminderText={reminderMessage}
+        reminderText={userInput}
         chatId={currentChatId || undefined}
         onReminderSet={handleReminderSet}
       />

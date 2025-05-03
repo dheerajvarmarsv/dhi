@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ const RemindersScreen: React.FC = () => {
   const [remindersCount, setRemindersCount] = useState(0);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const navigation = useNavigation();
+  const [refreshKey, setRefreshKey] = useState(0);
   
   const handleBackPress = () => {
     navigation.goBack();
@@ -40,7 +41,8 @@ const RemindersScreen: React.FC = () => {
           onPress: async () => {
             try {
               await deleteAllReminders();
-              // The ReminderList component will automatically refresh
+              setRefreshKey(prevKey => prevKey + 1);
+              setRemindersCount(0);
             } catch (error) {
               console.error('Error deleting all reminders:', error);
               Alert.alert('Error', 'Failed to delete reminders. Please try again.');
@@ -179,6 +181,7 @@ const RemindersScreen: React.FC = () => {
       </View>
       
       <ReminderList 
+        key={refreshKey}
         onReminderCountChange={setRemindersCount}
         {...getFilterProps(activeFilter)}
       />

@@ -284,6 +284,7 @@ const ReminderDialog: React.FC<ReminderDialogProps> = ({
   // Process text to extract suggested reminder time
   useEffect(() => {
     if (visible && reminderText) {
+      // Set the text to the original reminder message for editing
       setText(reminderText);
       
       // Use the enhanced time extraction

@@ -20,7 +20,7 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
   const [reminderMessage, setReminderMessage] = useState('');
   const [extractedTime, setExtractedTime] = useState<Date | null>(null);
   const [suggestedPriority, setSuggestedPriority] = useState<'low' | 'medium' | 'high'>('medium');
-  const [wasProcessed, setWasProcessed] = useState(false);
+  const [prevUserInput, setPrevUserInput] = useState('');
   
   // Clear the reminder intent detection
   const clearReminderIntent = () => {
@@ -28,7 +28,6 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
     setReminderMessage('');
     setExtractedTime(null);
     setSuggestedPriority('medium');
-    setWasProcessed(false); // Reset the processed flag
   };
   
   /**
@@ -198,331 +197,163 @@ export const useReminderDetection = (userInput: string): ReminderDetectionResult
   }
   
   useEffect(() => {
-    // Skip empty messages
+    // Skip if input hasn't changed
+    if (userInput === prevUserInput) {
+      return;
+    }
+    
+    // Update previous input
+    setPrevUserInput(userInput);
+    
+    // Skip empty inputs
     if (!userInput.trim()) {
       clearReminderIntent();
       return;
     }
     
-    // Reset processed flag for new input to ensure we can process it again
-    setWasProcessed(false);
+    // Detect reminder intent
+    const hasIntent = hasRealReminderIntent(userInput);
     
-    // Apply spelling correction for common reminder-related misspellings
-    const correctedInput = correctSpellingMistakes(userInput);
-    
-    // Check for genuine reminder intent using the more accurate function
-    let hasIntent = hasRealReminderIntent(correctedInput);
-    
-    // Skip false positives that contain reminder-related words but aren't actual requests
     if (hasIntent) {
-      // Make a final check to avoid false positives in conversational context
-      // If the text is clearly asking about something rather than requesting a reminder
-      const askingAboutReminders = /\b(?:what|how|why|when|tell me about)\s+(?:is|are|do|does|can|could)\s+(?:reminders?|alerts?)\b/i.test(correctedInput);
+      // Always use the original user input for the reminder message
+      setReminderMessage(userInput);
+      setHasReminderIntent(true);
       
-      if (askingAboutReminders) {
-        hasIntent = false;
-      }
-    }
-    
-    // Set the state
-    setHasReminderIntent(hasIntent);
-    
-    if (hasIntent) {
-      // Get suggested priority based on keywords
-      const priorityLevel = (() => {
-        // High priority keywords
-        if (correctedInput.match(/\b(urgent|asap|important|critical|emergency|immediately|right away|crucial|hurry|rush|priority|high priority|high|very important|super important|extremely important|urgent|must|imperative|vital|essential|necessary|needed|quick|fast)\b/i)) {
-          return 'high';
-        } 
-        // Low priority keywords
-        else if (correctedInput.match(/\b(low priority|whenever|not urgent|when you get a chance|no rush|sometime|some time|eventually|when possible|lazy|chill|relax|not important|secondary|tertiary|minor|trivial|if you have time|if you can|casual|no hurry|low)\b/i)) {
-          return 'low';
+      // Extract time if possible
+      try {
+        const { time } = extractTimeFromText(userInput);
+        if (time) {
+          setExtractedTime(time);
+        } else {
+          // Default to 30 minutes from now if no time specified
+          setExtractedTime(new Date(Date.now() + 30 * 60 * 1000));
         }
-        return 'medium';
-      })();
-      
-      setSuggestedPriority(priorityLevel);
-      
-      // Use the reminder extraction utility to get the time and message
-      const extractionResult = extractReminderFromText(correctedInput);
-      
-      if (extractionResult) {
-        setReminderMessage(extractionResult.message);
-        setExtractedTime(extractionResult.time);
-      } else {
-        // For cases where we detected intent but couldn't extract a structured reminder,
-        // try to clean up the text by removing common reminder request phrases
-        let cleanedText = correctedInput
-          .replace(/remind me to/gi, '')
-          .replace(/remind me about/gi, '')
-          .replace(/remind me that/gi, '')
-          .replace(/remind me/gi, '')
-          .replace(/set a reminder to/gi, '')
-          .replace(/set a reminder for/gi, '')
-          .replace(/set a reminder/gi, '')
-          .replace(/create a reminder to/gi, '')
-          .replace(/create a reminder for/gi, '')
-          .replace(/create a reminder/gi, '')
-          .replace(/don't let me forget to/gi, '')
-          .replace(/don't let me forget/gi, '')
-          .trim();
-          
-        setReminderMessage(cleanedText);
         
-        // If no time from the extractor, try to extract it manually
-        const timeResult = extractTimeFromText(correctedInput);
-        setExtractedTime(timeResult.time);
+        // Detect priority based on keywords
+        const lowercaseInput = userInput.toLowerCase();
+        if (lowercaseInput.includes('urgent') || lowercaseInput.includes('important') || 
+            lowercaseInput.includes('asap') || lowercaseInput.includes('critical')) {
+          setSuggestedPriority('high');
+        } else if (lowercaseInput.includes('low priority') || lowercaseInput.includes('whenever') ||
+                  lowercaseInput.includes('not urgent')) {
+          setSuggestedPriority('low');
+        } else {
+          setSuggestedPriority('medium');
+        }
+      } catch (error) {
+        console.error('Error extracting time from reminder:', error);
       }
     } else {
-      // Not a reminder intent
-      setReminderMessage('');
-      setExtractedTime(null);
+      clearReminderIntent();
     }
-    
-  }, [userInput]);
+  }, [userInput]); // Only depend on userInput
   
   return { 
-    hasReminderIntent, 
-    reminderMessage, 
+    hasReminderIntent,
+    reminderMessage,
     extractedTime,
     suggestedPriority,
-    clearReminderIntent 
+    clearReminderIntent
   };
 };
 
-/**
- * Check if a string contains another string in a fuzzy way, allowing for minor typos
- */
+// Helper functions
 function fuzzyContains(str: string, searchTerm: string): boolean {
-  // Convert both to lowercase for case-insensitive matching
-  str = str.toLowerCase();
-  searchTerm = searchTerm.toLowerCase();
+  // Simple implementation of fuzzy matching
+  const searchTermChars = searchTerm.toLowerCase().split('');
+  let currentPosition = 0;
+  const strLower = str.toLowerCase();
   
-  // Exact match check first (faster)
-  if (str.includes(searchTerm)) {
-    return true;
-  }
-  
-  // Allow for simple typos by checking if a substring with up to 1 character different exists
-  const searchTermLength = searchTerm.length;
-  
-  // Don't do fuzzy matching for very short strings (to avoid false positives)
-  if (searchTermLength <= 2) {
-    return str.includes(searchTerm);
-  }
-  
-  // For longer strings, split the input and check each word
-  const words = str.split(/\s+/);
-  
-  for (const word of words) {
-    // Skip very short words
-    if (word.length < searchTermLength - 1) continue;
-    
-    // Check for similarity with the search term
-    if (levenshteinDistance(word, searchTerm) <= Math.min(2, Math.floor(searchTermLength / 3))) {
-      return true;
+  for (const char of searchTermChars) {
+    const position = strLower.indexOf(char, currentPosition);
+    if (position === -1) {
+      return false;
     }
-    
-    // Also check for substring matches (for longer words)
-    if (word.length > searchTermLength + 2) {
-      for (let i = 0; i <= word.length - searchTermLength; i++) {
-        const substring = word.substr(i, searchTermLength);
-        if (levenshteinDistance(substring, searchTerm) <= 1) {
-          return true;
-        }
-      }
-    }
+    currentPosition = position + 1;
   }
   
-  return false;
+  return true;
 }
 
-/**
- * Calculate Levenshtein distance between two strings
- * This measures how many single-character edits are needed to change one string into another
- */
 function levenshteinDistance(a: string, b: string): number {
-  // Early return for empty strings or exact matches
-  if (a === b) return 0;
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
+  const matrix = [];
   
-  // Create a matrix of size (a.length+1) x (b.length+1)
-  const matrix: number[][] = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
-  
-  // Initialize the first row and column
-  for (let i = 0; i <= a.length; i++) {
-    matrix[i][0] = i;
+  // Initialize matrix
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
   }
-  for (let j = 0; j <= b.length; j++) {
+  
+  for (let j = 0; j <= a.length; j++) {
     matrix[0][j] = j;
   }
   
-  // Fill the matrix
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,      // deletion
-        matrix[i][j - 1] + 1,      // insertion
-        matrix[i - 1][j - 1] + cost // substitution
-      );
-    }
-  }
-  
-  return matrix[a.length][b.length];
-}
-
-/**
- * Correct common spelling mistakes in reminder-related text
- */
-function correctSpellingMistakes(input: string): string {
-  const corrections: {[key: string]: string} = {
-    // Common reminder word misspellings
-    'remid': 'remind',
-    'remined': 'remind',
-    'remaider': 'reminder',
-    'remender': 'reminder',
-    'remaind': 'remind',
-    'remainder': 'reminder',
-    'remin': 'remind',
-    'remindr': 'reminder',
-    'reminme': 'remind me',
-    'remine': 'remind',
-    'reminde': 'remind',
-    'reminf': 'remind',
-    'rememberme': 'remember me',
-    'remembrme': 'remember me',
-    'forgt': 'forget',
-    'forgit': 'forget',
-    'forg': 'forget',
-    'alerm': 'alarm',
-    'alarme': 'alarm',
-    'alram': 'alarm',
-    'alrm': 'alarm',
-    'remembr': 'remember',
-    'rember': 'remember',
-    'scheduel': 'schedule',
-    'schedul': 'schedule',
-    'shedule': 'schedule',
-    'schdule': 'schedule',
-    'schdul': 'schedule',
-    'sheduled': 'scheduled',
-    'tomorow': 'tomorrow',
-    'tommorow': 'tomorrow',
-    'tomorro': 'tomorrow',
-    'tomorrw': 'tomorrow',
-    'tommorrow': 'tomorrow',
-    'tmrw': 'tomorrow',
-    'tmr': 'tomorrow',
-    'tonite': 'tonight',
-    'tonigt': 'tonight',
-    'tonght': 'tonight',
-    'tnght': 'tonight',
-    'minuts': 'minutes',
-    'minit': 'minute',
-    'minits': 'minutes',
-    'mints': 'minutes',
-    'minut': 'minute',
-    'oclock': "o'clock",
-    'wrokout': 'workout',
-    'wrk': 'work',
-    'wrkout': 'workout',
-    'excersise': 'exercise',
-    'exercize': 'exercise',
-    'exercse': 'exercise',
-    'excercise': 'exercise',
-    // Additional corrections for common mistakes
-    'remindin': 'reminding',
-    'remindme': 'remind me',
-    'todo': 'to do',
-    'todolist': 'to do list',
-    'to-do': 'to do',
-    'to-do-list': 'to do list',
-    '2do': 'to do',
-    'rmnd': 'remind',
-    'rmind': 'remind',
-    'remidn': 'remind',
-    'notifi': 'notify',
-    'notifie': 'notify',
-    'notfy': 'notify',
-    'notfiy': 'notify',
-    'apointment': 'appointment',
-    'appointmnt': 'appointment',
-    'apptmt': 'appointment',
-    'appt': 'appointment',
-    'appoinmnt': 'appointment',
-    'appntmnt': 'appointment',
-    'appoinment': 'appointment',
-    'apoint': 'appointment',
-    'apt': 'appointment',
-    'mtg': 'meeting',
-    'meetng': 'meeting',
-    'meetin': 'meeting',
-    'meating': 'meeting',
-    'scedule': 'schedule',
-    'shcedule': 'schedule',
-    'checlist': 'checklist',
-    'chcklst': 'checklist',
-    'checkist': 'checklist',
-    'cehcklist': 'checklist',
-    'don\'t forget': "don't forget",
-    'dont forget': "don't forget",
-    'dnt forget': "don't forget",
-    'dont 4get': "don't forget",
-    'csn': 'can',
-    'kn': 'can',
-    'cn': 'can',
-    // Additional reminder spelling variations
-    'remindar': 'reminder',
-    'remunder': 'reminder',
-    'remaindar': 'reminder',
-    'reminer': 'reminder',
-    'remindur': 'reminder',
-    'remindder': 'reminder',
-    'remindir': 'reminder',
-    'remindor': 'reminder',
-    'reminderr': 'reminder',
-    'riminder': 'reminder',
-    'rimainder': 'reminder',
-    'rimender': 'reminder',
-    'remaynder': 'reminder',
-    'rmainder': 'reminder',
-    'rmndr': 'reminder',
-    'remider': 'reminder',
-  };
-  
-  // Prepare input for processing
-  let corrected = input;
-  const words = input.toLowerCase().split(/\s+/);
-  
-  // Apply corrections
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i];
-    
-    // Check if this word needs correction
-    if (corrections[word]) {
-      // Create a regex that matches the word with proper word boundaries
-      const regex = new RegExp(`\\b${word}\\b`, 'i');
-      corrected = corrected.replace(regex, corrections[word]);
-    }
-  }
-  
-  // Check for common phrase patterns (non-word-boundary specific)
-  for (const [mistake, correction] of Object.entries(corrections)) {
-    if (mistake.includes(' ') || mistake.length > 5) {
-      // For longer phrases or multi-word phrases, do a direct check
-      const regex = new RegExp(mistake, 'i');
-      if (regex.test(corrected)) {
-        corrected = corrected.replace(regex, correction);
+  // Fill in the rest of the matrix
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i-1) === a.charAt(j-1)) {
+        matrix[i][j] = matrix[i-1][j-1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i-1][j-1] + 1, // substitution
+          matrix[i][j-1] + 1,   // insertion
+          matrix[i-1][j] + 1    // deletion
+        );
       }
     }
   }
   
-  // Special case for "todo" which might be part of other words
-  if (/\btodo\b/i.test(corrected) || /\bto-do\b/i.test(corrected)) {
-    corrected = corrected.replace(/\btodo\b/gi, 'to do').replace(/\bto-do\b/gi, 'to do');
-  }
+  return matrix[b.length][a.length];
+}
+
+function correctSpellingMistakes(input: string): string {
+  // List of common reminder-related words and their misspellings
+  const corrections: {[key: string]: string[]} = {
+    'reminder': ['remainder', 'remaider', 'remider', 'remminder', 'remindir', 'remindr'],
+    'remind': ['remaind', 'remamd', 'remid', 'remmind', 'remend'],
+    'tomorrow': ['tommorow', 'tomorow', 'tommorrow', 'tomorrrow', 'tmrw', 'tomrw'],
+    'today': ['tday', 'todey', 'toady', 'todaye'],
+    'tonight': ['tonite', 'tonigt', 'tonihgt', 'tonit'],
+    'minutes': ['mins', 'minuts', 'munutes', 'minnutes', 'minuets'],
+    'minute': ['min', 'minut', 'minit', 'minet'],
+    'hours': ['hrs', 'houres', 'hors', 'hourss'],
+    'hour': ['hr', 'houre', 'hor'],
+    'meeting': ['meetin', 'meating', 'meetng', 'meting'],
+    'appointment': ['apointment', 'appointmnt', 'appt', 'appointment', 'apmnt'],
+    'schedule': ['schedual', 'scedule', 'shedule', 'schdule', 'sched'],
+    'call': ['cal', 'coll', 'caul'],
+    'calendar': ['calander', 'calender', 'calandar', 'callendar'],
+    'alarm': ['alarme', 'alerm', 'alrm', 'alarrm'],
+    'alert': ['allert', 'alirt', 'alart', 'alrt']
+  };
   
-  return corrected;
+  let correctedInput = input;
+  
+  // Split the input into words
+  const words = input.split(/\s+/);
+  
+  // Check each word against our dictionary of corrections
+  const correctedWords = words.map(word => {
+    // Keep original capitalization and punctuation
+    const lowercase = word.toLowerCase();
+    const punctuation = lowercase.match(/[^\w\s]$/);
+    const strippedWord = lowercase.replace(/[^\w\s]/g, '');
+    
+    // Check if this word is a misspelling we know
+    for (const [correctWord, misspellings] of Object.entries(corrections)) {
+      if (misspellings.includes(strippedWord)) {
+        // Return the corrected word with original punctuation
+        return correctWord + (punctuation ? punctuation[0] : '');
+      }
+      
+      // Check for close matches using edit distance
+      if (strippedWord.length > 3 && levenshteinDistance(strippedWord, correctWord) <= 2) {
+        return correctWord + (punctuation ? punctuation[0] : '');
+      }
+    }
+    
+    // No correction needed
+    return word;
+  });
+  
+  return correctedWords.join(' ');
 }

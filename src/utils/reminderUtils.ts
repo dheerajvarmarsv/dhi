@@ -70,25 +70,11 @@ export const initializeSound = () => {
 
 // Play reminder sound
 export const playReminderSound = () => {
-  // Enable playback in silent mode
-  Sound.setCategory('Playback');
+  // Use simple vibration as the primary feedback
+  Vibration.vibrate(300);
   
-  // Load the sound file
-  const sound = new Sound('notification.mp3', Sound.MAIN_BUNDLE, (error) => {
-    if (error) {
-      console.error('Failed to load the sound', error);
-      return;
-    }
-    
-    // Play the sound
-    sound.play((success) => {
-      if (!success) {
-        console.error('Playback failed due to audio decoding errors');
-      }
-      // Release when played
-      sound.release();
-    });
-  });
+  // No need to attempt loading system sounds that don't exist
+  // The system will handle notification sounds when actually sending notifications
 };
 
 // Schedule a local notification for a reminder
@@ -105,7 +91,7 @@ export const scheduleLocalNotification = (reminder: Reminder) => {
         title: 'Reminder',
         body: reminder.text,
         fireDate: new Date(reminder.timestamp),
-        sound: 'notification.mp3',
+        sound: 'default', // Use default iOS notification sound
         repeats: false,
         userInfo: { id: reminder.id }
       });
@@ -119,7 +105,7 @@ export const scheduleLocalNotification = (reminder: Reminder) => {
         date: new Date(reminder.timestamp),
         allowWhileIdle: true,
         playSound: reminder.soundEnabled,
-        soundName: 'notification.mp3',
+        soundName: 'default', // Use default Android notification sound
         vibrate: true,
         priority: reminder.priority === 'high' ? 'high' : 'default',
         importance: reminder.priority === 'high' ? 'high' : 'default',
@@ -162,7 +148,7 @@ export const initializeReminders = () => {
           PushNotificationIOS.presentLocalNotification({
             alertTitle: notification.title || 'Reminder',
             alertBody: notification.message || '',
-            soundName: 'notification.mp3',
+            soundName: 'default',
           });
         }
       } catch (error) {
@@ -199,7 +185,7 @@ export const initializeReminders = () => {
         channelName: 'Reminders',
         channelDescription: 'Regular reminders for DHI app',
         playSound: true,
-        soundName: 'notification.mp3',
+        soundName: 'default', // Use default Android notification sound
         importance: Importance.HIGH,
         vibrate: true,
       },
@@ -213,7 +199,7 @@ export const initializeReminders = () => {
         channelName: 'Important Reminders',
         channelDescription: 'High-priority reminders for DHI app',
         playSound: true,
-        soundName: 'notification.mp3',
+        soundName: 'default', // Use default Android notification sound
         importance: Importance.HIGH,
         vibrate: true,
       },
@@ -227,7 +213,7 @@ export const initializeReminders = () => {
         channelName: 'Task Lists',
         channelDescription: 'To-do list tasks for DHI app',
         playSound: true,
-        soundName: 'notification.mp3',
+        soundName: 'default', // Use default Android notification sound
         importance: Importance.DEFAULT,
         vibrate: true,
       },
@@ -241,7 +227,7 @@ export const initializeReminders = () => {
         channelName: 'Recurring Reminders',
         channelDescription: 'Recurring reminders for DHI app',
         playSound: true,
-        soundName: 'notification.mp3',
+        soundName: 'default', // Use default Android notification sound
         importance: Importance.DEFAULT,
         vibrate: true,
       },
@@ -432,6 +418,9 @@ export const deleteAllReminders = async (): Promise<void> => {
     // For Android
     PushNotification.setApplicationIconBadgeNumber(0);
   }
+  
+  // Make sure to call updateBadgeCount to sync the count properly
+  await updateBadgeCount();
 };
 
 // Get all active reminders
@@ -691,61 +680,69 @@ export const extractTimeFromText = (text: string): { time: Date | null; extracte
 export const extractReminderFromText = (
   text: string
 ): { message: string; time: Date | null } | null => {
-  // Regex patterns for reminder requests
-  const reminderPatterns = [
-    /remind(?:er)?\s+(?:me|us)?\s+(?:to|about|that)?\s+(.+?)(?:\s+at\s+|\s+on\s+|\s+in\s+|\s+tomorrow)/i,
-    /don't\s+let\s+me\s+forget\s+(?:to|about|that)?\s+(.+?)(?:\s+at\s+|\s+on\s+|\s+in\s+|\s+tomorrow)/i,
-    /can\s+you\s+remind\s+(?:me|us)?\s+(?:to|about|that)?\s+(.+?)(?:\s+at\s+|\s+on\s+|\s+in\s+|\s+tomorrow)/i,
-    /set\s+(?:a|an)?\s+reminder\s+(?:to|about|for|that)?\s+(.+?)(?:\s+at\s+|\s+on\s+|\s+in\s+|\s+tomorrow)/i,
-    /remember\s+to\s+tell\s+me\s+(?:to|about|that)?\s+(.+?)(?:\s+at\s+|\s+on\s+|\s+in\s+|\s+tomorrow)/i
+  // Store the original text for better user experience
+  const originalText = text.trim();
+  
+  // If no text is provided, return null
+  if (!text) {
+    return null;
+  }
+  
+  // Match reminder-specific phrases
+  const reminderPhrases = [
+    /remind\s+(?:me|us)\s+(?:to|about|that)?/i,
+    /set\s+(?:a|an)?\s*reminder\s+(?:to|about|for|that)?/i,
+    /add\s+(?:a|an)?\s*reminder\s+(?:to|about|for|that)?/i,
+    /don'?t\s+(?:let\s+me\s+)forget\s+(?:to|about|that)?/i,
+    /remember\s+(?:to|about|for)?/i,
   ];
-
-  // Check if text contains a reminder request
+  
+  // Check for reminder intent
   let reminderContent = '';
-  for (const pattern of reminderPatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      reminderContent = match[1].trim();
+  let hasReminderIntent = false;
+  
+  for (const phrase of reminderPhrases) {
+    if (phrase.test(text)) {
+      hasReminderIntent = true;
+      // Extract content after the reminder phrase
+      const matches = text.match(phrase);
+      if (matches) {
+        const phrasePart = matches[0];
+        reminderContent = text.substring(text.indexOf(phrasePart) + phrasePart.length);
+      }
       break;
     }
   }
-
-  // If no reminder content found through patterns, check for common reminder phrases
-  if (!reminderContent) {
-    if (/remind|reminder|don't\s+forget|remember|notify/i.test(text)) {
-      // Extract time information first
-      const { time, extractedText } = extractTimeFromText(text);
-      
-      // If we found a time and there's remaining text, it might be a reminder
-      if (time) {
-        // Find content by removing common reminder prefixes
-        let content = extractedText
-          .replace(/(?:please )?remind (?:me|us) (?:to|about|that)?/i, '')
-          .replace(/(?:please )?don't let (?:me|us) forget (?:to|about|that)?/i, '')
-          .replace(/(?:can you )?remind (?:me|us) (?:to|about|that)?/i, '')
-          .replace(/(?:please )?set a reminder (?:to|about|for|that)?/i, '')
-          .replace(/(?:please )?remember to tell (?:me|us) (?:to|about|that)?/i, '')
-          .trim();
-          
-        if (content) {
-          return { message: content, time };
-        }
+  
+  // If explicit reminder intent found
+  if (hasReminderIntent) {
+    // Clean up text but preserve important content
+    if (reminderContent) {
+      const content = reminderContent
+        .replace(/(?:please\s+)?for\s+me\s+(?:to|about)?/i, '')
+        .replace(/(?:please\s+)?remind\s+me\s+(?:to|about|that)?/i, '')
+        .replace(/(?:please\s+)?set\s+a\s+reminder\s+(?:to|about|for|that)?/i, '')
+        .replace(/(?:please\s+)?remember\s+to\s+tell\s+(?:me|us)\s+(?:to|about|that)?/i, '')
+        .trim();
+        
+      if (content) {
+        // Extract time information but use original message text
+        const { time } = extractTimeFromText(text);
+        return { message: originalText, time };
       }
-      
-      return null;
     }
     
     return null;
   }
 
-  // Extract time information
-  const { time, extractedText } = extractTimeFromText(text);
+  // Even if we don't find explicit reminder intent, still extract time and use original message
+  const { time } = extractTimeFromText(text);
   
   // If we couldn't find a specific time, default to 1 hour from now
   const reminderTime = time || new Date(Date.now() + 3600000);
   
   return {
-    message: reminderContent || extractedText.trim(),
+    message: originalText,
     time: reminderTime
   };
 };
@@ -1061,29 +1058,17 @@ export const updateBadgeCount = async () => {
   }
 };
 
-// Update this function to use only notification.mp3
+// Update this function to use vibration only to avoid sound loading errors
 export const playPrioritySoundEffect = (priority: 'low' | 'medium' | 'high' = 'medium', isRecurring = false) => {
-  // Enable playback in silent mode
-  Sound.setCategory('Playback');
+  // Use vibration with duration based on priority
+  const duration = priority === 'high' ? 500 : (priority === 'medium' ? 300 : 150);
   
-  // Use only notification.mp3 for all cases
-  const soundFile = 'notification.mp3';
-  
-  // Load the sound file
-  const sound = new Sound(soundFile, Sound.MAIN_BUNDLE, (error) => {
-    if (error) {
-      console.error('Failed to load the sound', error);
-      return;
-    }
-    
-    // Adjust volume based on priority
-    sound.setVolume(priority === 'high' ? 1.0 : 0.8);
-    sound.play((success) => {
-      if (!success) {
-        console.error('Playback failed due to audio decoding errors');
-      }
-      // Release when played
-      sound.release();
-    });
-  });
+  // Stronger vibration for high priority
+  if (priority === 'high') {
+    // Double vibration for high priority
+    Vibration.vibrate([0, duration, 200, duration]);
+  } else {
+    // Single vibration for medium/low priority
+    Vibration.vibrate(duration);
+  }
 };
