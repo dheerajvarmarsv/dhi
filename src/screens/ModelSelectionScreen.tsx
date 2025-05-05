@@ -217,167 +217,183 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
       );
       return;
     }
-
-    // Check network connectivity first
-    try {
-      const downloadUrl = `https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILENAME}`;
-      
-      // Set up timeout with AbortController
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      try {
-        // Attempt a HEAD request to verify connectivity
-        const connectionTest = await fetch(downloadUrl, { 
-          method: 'HEAD',
-          signal: controller.signal
-        });
-        
-        // Clear the timeout
-        clearTimeout(timeoutId);
-        
-        if (!connectionTest.ok) {
-          throw new Error(`Server returned status ${connectionTest.status}: ${connectionTest.statusText}`);
-        }
-        
-        console.log('Connection test passed, proceeding with download');
-      } catch (error) {
-        clearTimeout(timeoutId);
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw new Error('Connection timed out. Server is not responding.');
-        }
-        throw error;
-      }
-    } catch (connectionError) {
-      const errorMessage = connectionError instanceof Error ? connectionError.message : 'Network connection error';
-      Alert.alert(
-        'Connection Error',
-        `${errorMessage}\n\nPlease check your internet connection and try again.`,
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setIsDownloading(true);
-    setProgress(0);
-
-    try {
-      const downloadUrl = `https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILENAME}`;
-      const destPath = `${RNFS.DocumentDirectoryPath}/${MODEL_FILENAME}`;
-      
-      // Check if already exists
-      const fileExists = await RNFS.exists(destPath);
-      if (fileExists) {
-        try {
-          // Verify file integrity
-          const fileInfo = await RNFS.stat(destPath);
-          if (fileInfo.size > 100 * 1024 * 1024) { // Should be at least 100MB
-            // File exists and is reasonable size - proceed
-            setIsModelDownloaded(true);
-            navigation.navigate('Chat', { selectedModel: MODEL_FILENAME });
-            return;
-          } else {
-            // File exists but is suspiciously small - delete and redownload
-            console.log('Existing file too small, deleting and redownloading');
-            await RNFS.unlink(destPath);
-          }
-        } catch (error) {
-          console.error('Error checking existing file:', error);
-          // Proceed with download
-        }
-      }
-
-      // Create a progress handler with a timeout detection
-      let lastProgressTimestamp = Date.now();
-      const progressHandler = (progressValue: number) => {
-        setProgress(progressValue);
-        lastProgressTimestamp = Date.now();
-      };
-      
-      // Start a watchdog timer to detect stalled downloads
-      const watchdogTimer = setInterval(() => {
-        const stallTime = Date.now() - lastProgressTimestamp;
-        
-        if (stallTime > 30000) { // 30 seconds with no progress
-          console.warn(`Download appears stalled (${stallTime}ms since last progress)`);
-          
-          // Only show alert if download is actually in progress
-          if (isDownloading) {
-            // For iOS, give more detailed feedback
-            if (Platform.OS === 'ios') {
+  
+    // Add confirmation dialog before download
+    Alert.alert(
+      'Download Confirmation',
+      'This will download 808.8 MB of data to your device. Make sure you\'re connected to WiFi. Continue?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Download',
+          onPress: async () => {
+            // Check network connectivity first
+            try {
+              const downloadUrl = `https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILENAME}`;
+              
+              // Set up timeout with AbortController
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+              
+              try {
+                // Attempt a HEAD request to verify connectivity
+                const connectionTest = await fetch(downloadUrl, { 
+                  method: 'HEAD',
+                  signal: controller.signal
+                });
+                
+                // Clear the timeout
+                clearTimeout(timeoutId);
+                
+                if (!connectionTest.ok) {
+                  throw new Error(`Server returned status ${connectionTest.status}: ${connectionTest.statusText}`);
+                }
+                
+                console.log('Connection test passed, proceeding with download');
+              } catch (error) {
+                clearTimeout(timeoutId);
+                if (error instanceof Error && error.name === 'AbortError') {
+                  throw new Error('Connection timed out. Server is not responding.');
+                }
+                throw error;
+              }
+            } catch (connectionError) {
+              const errorMessage = connectionError instanceof Error ? connectionError.message : 'Network connection error';
               Alert.alert(
-                'Download Status',
-                'The download appears to be slow. This could be due to network conditions. Do you want to continue waiting?',
-                [
-                  { 
-                    text: 'Cancel', 
-                    style: 'destructive',
-                    onPress: () => {
-                      clearInterval(watchdogTimer);
-                      setIsDownloading(false);
-                    }
-                  },
-                  { 
-                    text: 'Continue Waiting',
-                    onPress: () => {
-                      // Reset the timestamp to avoid repeated alerts
-                      lastProgressTimestamp = Date.now();
+                'Connection Error',
+                `${errorMessage}\n\nPlease check your internet connection and try again.`,
+                [{ text: 'OK' }]
+              );
+              return;
+            }
+  
+            setIsDownloading(true);
+            setProgress(0);
+  
+            try {
+              const downloadUrl = `https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILENAME}`;
+              const destPath = `${RNFS.DocumentDirectoryPath}/${MODEL_FILENAME}`;
+              
+              // Check if already exists
+              const fileExists = await RNFS.exists(destPath);
+              if (fileExists) {
+                try {
+                  // Verify file integrity
+                  const fileInfo = await RNFS.stat(destPath);
+                  if (fileInfo.size > 100 * 1024 * 1024) { // Should be at least 100MB
+                    // File exists and is reasonable size - proceed
+                    setIsModelDownloaded(true);
+                    navigation.navigate('Chat', { selectedModel: MODEL_FILENAME });
+                    return;
+                  } else {
+                    // File exists but is suspiciously small - delete and redownload
+                    console.log('Existing file too small, deleting and redownloading');
+                    await RNFS.unlink(destPath);
+                  }
+                } catch (error) {
+                  console.error('Error checking existing file:', error);
+                  // Proceed with download
+                }
+              }
+  
+              // Create a progress handler with a timeout detection
+              let lastProgressTimestamp = Date.now();
+              const progressHandler = (progressValue: number) => {
+                setProgress(progressValue);
+                lastProgressTimestamp = Date.now();
+              };
+              
+              // Start a watchdog timer to detect stalled downloads
+              const watchdogTimer = setInterval(() => {
+                const stallTime = Date.now() - lastProgressTimestamp;
+                
+                if (stallTime > 30000) { // 30 seconds with no progress
+                  console.warn(`Download appears stalled (${stallTime}ms since last progress)`);
+                  
+                  // Only show alert if download is actually in progress
+                  if (isDownloading) {
+                    // For iOS, give more detailed feedback
+                    if (Platform.OS === 'ios') {
+                      Alert.alert(
+                        'Download Status',
+                        'The download appears to be slow. This could be due to network conditions. Do you want to continue waiting?',
+                        [
+                          { 
+                            text: 'Cancel', 
+                            style: 'destructive',
+                            onPress: () => {
+                              clearInterval(watchdogTimer);
+                              setIsDownloading(false);
+                            }
+                          },
+                          { 
+                            text: 'Continue Waiting',
+                            onPress: () => {
+                              // Reset the timestamp to avoid repeated alerts
+                              lastProgressTimestamp = Date.now();
+                            }
+                          }
+                        ]
+                      );
                     }
                   }
-                ]
+                }
+              }, 30000); // Check every 30 seconds
+  
+              // Start download
+              await downloadModel(MODEL_FILENAME, downloadUrl, progressHandler);
+              
+              // Download succeeded, clear the watchdog timer
+              clearInterval(watchdogTimer);
+              
+              Alert.alert(
+                'Download Complete',
+                'Ready to chat! Let\'s get started.',
+                [{ text: 'Let\'s Go', onPress: () => navigation.navigate('Chat', { selectedModel: MODEL_FILENAME }) }]
               );
+              
+              setIsModelDownloaded(true);
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              
+              // For iOS users, provide more detailed error analysis
+              if (Platform.OS === 'ios') {
+                let errorDetails = 'Please try again or contact support if the issue persists.';
+                let errorTitle = 'Download Error';
+                
+                // Check for common iOS-specific error patterns
+                if (errorMessage.includes('No space left') || errorMessage.includes('storage')) {
+                  errorTitle = 'Storage Space Error';
+                  errorDetails = 'Your device does not have enough storage space. Please free up some space and try again.';
+                } else if (errorMessage.includes('network') || errorMessage.includes('connection') || errorMessage.includes('offline')) {
+                  errorTitle = 'Network Error';
+                  errorDetails = 'Please check your internet connection and try again. The model requires a stable WiFi connection.';
+                } else if (errorMessage.includes('timeout')) {
+                  errorTitle = 'Download Timeout';
+                  errorDetails = 'The download timed out. This may be due to a slow internet connection. Please try again on a faster network.';
+                }
+                
+                Alert.alert(
+                  errorTitle,
+                  `${errorMessage}\n\n${errorDetails}`,
+                  [{ text: 'OK' }]
+                );
+              } else {
+                // Standard error for Android
+                Alert.alert('Download Error', `Failed to download: ${errorMessage}`);
+              }
+              
+              console.error('Download error details:', error);
+            } finally {
+              setIsDownloading(false);
             }
           }
         }
-      }, 30000); // Check every 30 seconds
-
-      // Start download
-      await downloadModel(MODEL_FILENAME, downloadUrl, progressHandler);
-      
-      // Download succeeded, clear the watchdog timer
-      clearInterval(watchdogTimer);
-      
-      Alert.alert(
-        'Download Complete',
-        'Ready to chat! Let\'s get started.',
-        [{ text: 'Let\'s Go', onPress: () => navigation.navigate('Chat', { selectedModel: MODEL_FILENAME }) }]
-      );
-      
-      setIsModelDownloaded(true);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
-      // For iOS users, provide more detailed error analysis
-      if (Platform.OS === 'ios') {
-        let errorDetails = 'Please try again or contact support if the issue persists.';
-        let errorTitle = 'Download Error';
-        
-        // Check for common iOS-specific error patterns
-        if (errorMessage.includes('No space left') || errorMessage.includes('storage')) {
-          errorTitle = 'Storage Space Error';
-          errorDetails = 'Your device does not have enough storage space. Please free up some space and try again.';
-        } else if (errorMessage.includes('network') || errorMessage.includes('connection') || errorMessage.includes('offline')) {
-          errorTitle = 'Network Error';
-          errorDetails = 'Please check your internet connection and try again. The model requires a stable WiFi connection.';
-        } else if (errorMessage.includes('timeout')) {
-          errorTitle = 'Download Timeout';
-          errorDetails = 'The download timed out. This may be due to a slow internet connection. Please try again on a faster network.';
-        }
-        
-        Alert.alert(
-          errorTitle,
-          `${errorMessage}\n\n${errorDetails}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        // Standard error for Android
-        Alert.alert('Download Error', `Failed to download: ${errorMessage}`);
-      }
-      
-      console.error('Download error details:', error);
-    } finally {
-      setIsDownloading(false);
-    }
+      ]
+    );
   };
 
   const handleModelSelection = () => {
@@ -570,7 +586,7 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
         
         {!isDownloading && !isModelDownloaded && (
           <Text style={styles.disclaimer}>
-            Requires WiFi and storage space on your device
+             Requires WiFi and at least 808.8 MB of storage space on your device
           </Text>
         )}
       </View>
