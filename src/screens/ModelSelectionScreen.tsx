@@ -221,7 +221,7 @@ const ModelSelectionScreen = ({ navigation }: Props) => {
     // Add confirmation dialog before download
     Alert.alert(
       'Download Confirmation',
-      'This will download 808.8 MB of data to your device. Make sure you\'re connected to WiFi. Continue?',
+      'This will download 808.8 MB of dhi\'s knowledge to your device. Make sure you\'re connected to WiFi. Continue?',
       [
         {
           text: 'Cancel',
