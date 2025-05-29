@@ -215,11 +215,15 @@ const ChatScreen = ({ route, navigation }: Props) => {
       Tts.setDefaultLanguage('en-US')
         .catch(err => console.error("TTS setDefaultLanguage error:", err));
       
-      // Ensure rate is explicitly a float and pass skipTransform
-      const rate = 0.55; 
-      Tts.setDefaultRate(parseFloat(rate.toFixed(2)), true) // Explicitly use parseFloat
-        .catch(err => console.error("TTS setDefaultRate error:", err));
-        
+      const rate = 0.5; // Standard rate
+      if (Platform.OS === 'ios') {
+        Tts.setDefaultRate(rate) // Try without skipTransform for iOS
+          .catch(err => console.error("TTS setDefaultRate iOS error:", err));
+      } else {
+        Tts.setDefaultRate(rate) // Android can also take one argument
+          .catch(err => console.error("TTS setDefaultRate Android error:", err));
+      }
+          
       Tts.setDefaultPitch(1.0)
         .catch(err => console.error("TTS setDefaultPitch error:", err));
   
@@ -241,14 +245,14 @@ const ChatScreen = ({ route, navigation }: Props) => {
     ttsStartListener = Tts.addEventListener('tts-start', (event) => console.log('TTS Start:', event));
     ttsFinishListener = Tts.addEventListener('tts-finish', (event) => console.log('TTS Finish:', event));
     ttsCancelListener = Tts.addEventListener('tts-cancel', (event) => console.log('TTS Cancel:', event));
-    ttsErrorListener = Tts.addEventListener('tts-error', (event) => console.error('TTS Error:', event));
+    // ttsErrorListener setup removed
   
     return () => {
       // Best effort to remove listeners if they were assigned
       ttsStartListener?.remove();
       ttsFinishListener?.remove();
       ttsCancelListener?.remove();
-      ttsErrorListener?.remove();
+      // ttsErrorListener removal removed
       Tts.stop(); // Stop TTS when the screen is unmounted
     };
   }, []);
