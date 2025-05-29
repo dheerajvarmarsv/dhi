@@ -205,7 +205,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
   useEffect(() => {
     Tts.setDefaultLanguage('en-US');
-    Tts.setDefaultRate(0.55); // Adjusted for slightly more natural speech
+    Tts.setDefaultRate(0.55, true); // Explicitly pass skipTransform: true
     Tts.setDefaultPitch(1.0);
 
     const ttsStartListener = Tts.addEventListener('tts-start', (event) => console.log('TTS Start:', event));
