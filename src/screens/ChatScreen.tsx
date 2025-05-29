@@ -204,34 +204,51 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
-    Tts.setDefaultLanguage('en-US');
-    Tts.setDefaultRate(0.55, true); // Explicitly pass skipTransform: true
-    Tts.setDefaultPitch(1.0);
-
-    const ttsStartListener = Tts.addEventListener('tts-start', (event) => console.log('TTS Start:', event));
-    const ttsFinishListener = Tts.addEventListener('tts-finish', (event) => console.log('TTS Finish:', event));
-    const ttsCancelListener = Tts.addEventListener('tts-cancel', (event) => console.log('TTS Cancel:', event));
-    const ttsErrorListener = Tts.addEventListener('tts-error', (event) => console.error('TTS Error:', event));
-
+    let ttsStartListener: any;
+    let ttsFinishListener: any;
+    let ttsCancelListener: any;
+    let ttsErrorListener: any;
+  
     Tts.getInitStatus().then(() => {
-      // Optional: Request install data if needed, or list available voices
-      // Tts.requestInstallData();
+      console.log("TTS Initialized successfully.");
+  
+      Tts.setDefaultLanguage('en-US')
+        .catch(err => console.error("TTS setDefaultLanguage error:", err));
+      
+      // Ensure rate is explicitly a float and pass skipTransform
+      const rate = 0.55; 
+      Tts.setDefaultRate(parseFloat(rate.toFixed(2)), true) // Explicitly use parseFloat
+        .catch(err => console.error("TTS setDefaultRate error:", err));
+        
+      Tts.setDefaultPitch(1.0)
+        .catch(err => console.error("TTS setDefaultPitch error:", err));
+  
+      // You might also consider re-fetching available voices if needed, or requesting install data
       // Tts.voices().then(voices => console.log("Available TTS voices:", voices));
-    }).catch(err => {
+      // Tts.requestInstallData(); // If language data needs to be downloaded for some engines
+  
+    }).catch((err) => {
       if (err.code === 'no_engine') {
-        // This means TTS is not available on the device, prompt user to install if possible
-        console.warn('TTS engine not available. Please install a TTS engine.');
-        // Alert.alert('TTS Engine Required', 'Please install a TTS engine to enable speech output.');
+        // This means no TTS engine is available on the device
+        console.warn('No TTS engine found on the device. TTS functionality will be disabled.');
+        // Optionally, inform the user via an alert or UI element
+        // Alert.alert('TTS Not Available', 'No Text-to-Speech engine was found on your device.');
       } else {
-        console.error("TTS Init Error:", err);
+        console.error("TTS getInitStatus error:", err);
       }
     });
-
+  
+    ttsStartListener = Tts.addEventListener('tts-start', (event) => console.log('TTS Start:', event));
+    ttsFinishListener = Tts.addEventListener('tts-finish', (event) => console.log('TTS Finish:', event));
+    ttsCancelListener = Tts.addEventListener('tts-cancel', (event) => console.log('TTS Cancel:', event));
+    ttsErrorListener = Tts.addEventListener('tts-error', (event) => console.error('TTS Error:', event));
+  
     return () => {
-      ttsStartListener.remove();
-      ttsFinishListener.remove();
-      ttsCancelListener.remove();
-      ttsErrorListener.remove();
+      // Best effort to remove listeners if they were assigned
+      ttsStartListener?.remove();
+      ttsFinishListener?.remove();
+      ttsCancelListener?.remove();
+      ttsErrorListener?.remove();
       Tts.stop(); // Stop TTS when the screen is unmounted
     };
   }, []);
