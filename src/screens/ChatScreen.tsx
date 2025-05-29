@@ -36,6 +36,9 @@ import {
 import { formatPrompt, promptTemplates, getAllPersonas, PromptTemplate } from '../utils/promptTemplates';
 import PersonaSelector from '../components/PersonaSelector';
 import ChatSidebar from '../components/ChatSidebar';
+import NativeVoiceModal from '../components/NativeVoiceModal'; // Import the new modal
+import Tts from 'react-native-tts'; // Import TTS
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; // Import Icon
 import { Message, ChatSession } from '../types';
 import { COLORS, FONTS } from '../constants/theme';
 
@@ -190,6 +193,8 @@ const ChatScreen = ({ route, navigation }: Props) => {
   const [reminderDialogVisible, setReminderDialogVisible] = useState(false);
   const [activeReminderCount, setActiveReminderCount] = useState(0);
   const { hasReminderIntent, reminderMessage, clearReminderIntent } = useReminderDetection(userInput);
+  const [isVoiceModeVisible, setIsVoiceModeVisible] = useState(false);
+  // isRecording and voiceStatusText are now managed by NativeVoiceModal
 
   // Add state for keyboard visibility
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -197,6 +202,60 @@ const ChatScreen = ({ route, navigation }: Props) => {
 
   // Add an appState ref to track app state changes
   const appStateRef = useRef(AppState.currentState);
+
+  useEffect(() => {
+    let ttsStartListener: any;
+    let ttsFinishListener: any;
+    let ttsCancelListener: any;
+    let ttsErrorListener: any;
+  
+    Tts.getInitStatus().then(() => {
+      console.log("TTS Initialized successfully.");
+  
+      Tts.setDefaultLanguage('en-US')
+        .catch(err => console.error("TTS setDefaultLanguage error:", err));
+      
+      const rate = 0.5; // Standard rate
+      if (Platform.OS === 'ios') {
+        Tts.setDefaultRate(rate) // Try without skipTransform for iOS
+          .catch(err => console.error("TTS setDefaultRate iOS error:", err));
+      } else {
+        Tts.setDefaultRate(rate) // Android can also take one argument
+          .catch(err => console.error("TTS setDefaultRate Android error:", err));
+      }
+          
+      Tts.setDefaultPitch(1.0)
+        .catch(err => console.error("TTS setDefaultPitch error:", err));
+  
+      // You might also consider re-fetching available voices if needed, or requesting install data
+      // Tts.voices().then(voices => console.log("Available TTS voices:", voices));
+      // Tts.requestInstallData(); // If language data needs to be downloaded for some engines
+  
+    }).catch((err) => {
+      if (err.code === 'no_engine') {
+        // This means no TTS engine is available on the device
+        console.warn('No TTS engine found on the device. TTS functionality will be disabled.');
+        // Optionally, inform the user via an alert or UI element
+        // Alert.alert('TTS Not Available', 'No Text-to-Speech engine was found on your device.');
+      } else {
+        console.error("TTS getInitStatus error:", err);
+      }
+    });
+  
+    ttsStartListener = Tts.addEventListener('tts-start', (event) => console.log('TTS Start:', event));
+    ttsFinishListener = Tts.addEventListener('tts-finish', (event) => console.log('TTS Finish:', event));
+    ttsCancelListener = Tts.addEventListener('tts-cancel', (event) => console.log('TTS Cancel:', event));
+    // ttsErrorListener setup removed
+  
+    return () => {
+      // Best effort to remove listeners if they were assigned
+      ttsStartListener?.remove();
+      ttsFinishListener?.remove();
+      ttsCancelListener?.remove();
+      // ttsErrorListener removal removed
+      Tts.stop(); // Stop TTS when the screen is unmounted
+    };
+  }, []);
 
   // Add these improved error handling functions for chat operations
   const loadModel = async (modelName: string) => {
@@ -758,14 +817,18 @@ const ChatScreen = ({ route, navigation }: Props) => {
   };
 
   // Modify handleSendMessage to handle the message transition properly
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (textFromVoice?: string) => {
+    Tts.stop(); // Stop any ongoing speech before processing new message
+    const messageToSend = (textFromVoice || userInput).trim();
+
     // Store current input to preserve it after setting reminder
-    const currentInput = userInput;
+    // If hasReminderIntent is true, it means the user typed the message, so use userInput
+    const currentInputForReminder = userInput; 
     
     // If message has reminder intent, show reminder dialog
-    if (hasReminderIntent) {
-      // Store the original user message that will be shown in the chat
-      // We do not set userInput to empty yet, so the editable text in the dialog will be the same
+    // This check should likely use the manually entered text (userInput)
+    // rather than potentially auto-sent voice text.
+    if (!textFromVoice && hasReminderIntent) { 
       setReminderDialogVisible(true);
       return;
     }
@@ -774,24 +837,32 @@ const ChatScreen = ({ route, navigation }: Props) => {
       Alert.alert('Model Not Loaded', 'Please wait for the model to load.');
       return;
     }
-    if (!currentInput.trim()) {
+    if (!messageToSend) { // Check if the final message to send is empty
       return;
     }
 
     // Ensure we have a valid chat ID before sending a message
-    if (!currentChatId) {
-      await createNewChat();
-      if (!currentChatId) {
+    let tempCurrentChatId = currentChatId;
+    if (!tempCurrentChatId) {
+      const newChat = await createNewChat(); // createNewChat should ideally return the new session or its ID
+      if (newChat && newChat.id) {
+        tempCurrentChatId = newChat.id;
+      } else {
         Alert.alert('Error', 'Could not create a chat. Please try again.');
         return;
       }
     }
 
     // Add user message to conversation
-    const newUserMessage: Message = { role: 'user', content: currentInput.trim() };
+    const newUserMessage: Message = { role: 'user', content: messageToSend };
     const updatedConversation = [...conversation, newUserMessage];
     setConversation(updatedConversation);
-    setUserInput('');
+    
+    // Clear userInput state only if textFromVoice was NOT used, 
+    // or always clear if that's the desired behavior after voice input too.
+    // For now, clear it if the message sent was from userInput.
+    // If it was from voice, userInput might have already been set by handleSpeechTranscribed and then cleared here.
+    setUserInput(''); 
     
     // Set up the initial loading state - model is thinking
     setIsFetchingResponse(true);   // Initial fetch - just thinking, no tokens yet
@@ -803,11 +874,11 @@ const ChatScreen = ({ route, navigation }: Props) => {
     try {
       // If this is the first user message and the chat title is "New Chat",
       // automatically rename it using the first 20 characters
-      if (chatTitle === 'New Chat' && conversation.length === 1) {
-        const newTitle = currentInput.trim().slice(0, 20);
+      if (chatTitle === 'New Chat' && updatedConversation.filter(m => m.role === 'user').length === 1) {
+        const newTitle = messageToSend.slice(0, 20);
         setChatTitle(newTitle);
-        if (currentChatId) {
-          await updateChatSession(currentChatId, {
+        if (tempCurrentChatId) { // Use the potentially newly created chat ID
+          await updateChatSession(tempCurrentChatId, {
             title: newTitle
           });
         }
@@ -949,6 +1020,20 @@ const ChatScreen = ({ route, navigation }: Props) => {
             showThought: false,
           }
         ]);
+        
+        // Speak the assistant's response
+        if (sanitizeAssistantResponse(currentAssistantMessage).trim()) {
+          Tts.speak(sanitizeAssistantResponse(currentAssistantMessage), {
+            androidParams: {
+              KEY_PARAM_PAN: 0,
+              KEY_PARAM_VOLUME: 1,
+              KEY_PARAM_STREAM: 'STREAM_MUSIC',
+            },
+            iosVoiceId: 'com.apple.voice.compact.en-US.Samantha', // Example
+            rate: 0.55, // Can override default rate
+          }).catch(error => console.error("TTS speak error:", error));
+        }
+
       } catch (error) {
         console.error('Error during completion:', error);
         Alert.alert('Error', 'Failed to generate a response. Please try again.');
@@ -1671,6 +1756,26 @@ const ChatScreen = ({ route, navigation }: Props) => {
     };
   }, [currentChatId, conversation, selectedPersonaId]);
 
+  const handleSpeechTranscribed = (text: string) => {
+    console.log("Transcribed text from modal: ", text);
+    // setUserInput(text); // Set userInput if you want to see it in the text box briefly
+    setIsVoiceModeVisible(false); 
+
+    if (text.trim()) {
+      handleSendMessage(text); // Pass the transcribed text directly
+    }
+  };
+
+  // handleVolumeChanged is no longer needed as visualizer is internal to NativeVoiceModal
+  // const handleVolumeChanged = (volume: number) => {
+  //   // This will be used by the visualizer component we'll add to the modal
+  //   // console.log("Volume: ", volume);
+  // };
+
+  const handleVoiceRecordingStarts = () => {
+    Tts.stop();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -1921,6 +2026,14 @@ const ChatScreen = ({ route, navigation }: Props) => {
             onFocus={() => setAutoScrollEnabled(true)}
           />
           
+          <TouchableOpacity
+            style={styles.voiceButton}
+            onPress={() => setIsVoiceModeVisible(prev => !prev)}
+            disabled={isGenerating}
+          >
+            <Icon name="microphone" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
+          
           {isGenerating ? (
             <ButtonWithAnimation
               onPress={stopGeneration}
@@ -1932,7 +2045,7 @@ const ChatScreen = ({ route, navigation }: Props) => {
             </ButtonWithAnimation>
           ) : (
             <ButtonWithAnimation
-              onPress={handleSendMessage}
+              onPress={() => handleSendMessage()} // Ensure it's called without args here
               style={[
                 styles.sendButton,
                 (!userInput.trim() || !context) && styles.sendButtonDisabled
@@ -1960,6 +2073,17 @@ const ChatScreen = ({ route, navigation }: Props) => {
         reminderText={userInput}
         chatId={currentChatId || undefined}
         onReminderSet={handleReminderSet}
+      />
+
+      <NativeVoiceModal
+        isVisible={isVoiceModeVisible}
+        onClose={() => {
+          setIsVoiceModeVisible(false);
+          // Voice.cancel() will be called internally by modal if needed on close
+        }}
+        onSpeechTranscribed={handleSpeechTranscribed}
+        // onVolumeChanged={handleVolumeChanged} // Prop removed
+        onVoiceRecordingStart={handleVoiceRecordingStarts} // Pass the new handler
       />
     </SafeAreaView>
   );
@@ -2375,6 +2499,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontFamily: FONTS.secondary,
     marginLeft: 6,
+  },
+  voiceButton: {
+    width: Math.min(40, width * 0.1),
+    height: Math.min(40, width * 0.1),
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0', // Example background color
+    borderRadius: 20, // Make it circular
+    marginRight: 8,
+    alignSelf: 'flex-end', // Align with input and send button
+    marginBottom: 0, // Align with send/stop button
+  },
+  voiceButtonIcon: {
+    // fontSize: Math.min(20, width * 0.05), // No longer needed for Icon
+    // color: COLORS.text, // No longer needed for Icon
   },
 });
 
